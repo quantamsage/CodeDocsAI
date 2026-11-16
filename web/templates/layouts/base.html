@@ -1,0 +1,20 @@
+{{define "base" -}}
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{block "title" .}}{{if .Title}}{{.Title}} · {{end}}CodeDocs AI{{end}}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  {{template "header" .}}
+  <main id="main" class="container">
+    {{block "content" .}}{{end}}
+  </main>
+  {{template "footer" .}}
+</body>
+</html>
+{{- end}}

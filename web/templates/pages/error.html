@@ -1,0 +1,9 @@
+{{define "content"}}
+<section class="error-page" role="alert">
+  <p class="error-code">{{.Data.Status}}</p>
+  <h1>{{.Data.Heading}}</h1>
+  <p>{{.Data.Message}}</p>
+  {{if .RequestID}}<p class="muted small">Request ID: <code>{{.RequestID}}</code></p>{{end}}
+  <p><a class="button" href="/">Back to home</a></p>
+</section>
+{{end}}
