@@ -1,0 +1,21 @@
+# Build output
+/bin/
+*.exe
+*.test
+*.out
+
+# Local runtime data (SQLite database, uploads)
+/data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Local environment
+.env
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
