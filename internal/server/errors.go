@@ -69,6 +69,8 @@ func (s *Server) handleError(w http.ResponseWriter, r *http.Request, err error) 
 // renderError renders the HTML error page, falling back to plain text if the
 // error template itself fails.
 func (s *Server) renderError(w http.ResponseWriter, r *http.Request, status int, message string) {
+	// Error pages show the signed-in user in the nav but never consume a
+	// pending flash message, so build the page without s.page.
 	page := view.Page{
 		Title:     http.StatusText(status),
 		RequestID: requestIDFrom(r.Context()),
@@ -77,6 +79,10 @@ func (s *Server) renderError(w http.ResponseWriter, r *http.Request, status int,
 			"Heading": http.StatusText(status),
 			"Message": message,
 		},
+	}
+	if cs := sessionFrom(r.Context()); cs != nil {
+		page.User = &view.User{ID: cs.user.ID, Email: cs.user.Email, DisplayName: cs.user.DisplayName}
+		page.CSRFToken = cs.session.CSRFToken
 	}
 	if err := s.views.Render(w, status, "error", page); err != nil {
 		loggerFrom(r.Context(), s.log).Error("render error page", slog.String("error", err.Error()))

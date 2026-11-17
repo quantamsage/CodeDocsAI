@@ -32,6 +32,10 @@ type Config struct {
 	LogFormat string
 	// ShutdownTimeout bounds graceful shutdown.
 	ShutdownTimeout time.Duration
+	// SessionLifetime is the absolute lifetime of a login session.
+	SessionLifetime time.Duration
+	// SessionIdleTimeout ends a session that has not been used for this long.
+	SessionIdleTimeout time.Duration
 }
 
 // IsProduction reports whether the app runs in production mode.
@@ -73,14 +77,22 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("APP_LOG_LEVEL: %w", err))
 	}
 
-	timeout, err := time.ParseDuration(get("APP_SHUTDOWN_TIMEOUT", "15s"))
-	switch {
-	case err != nil:
-		errs = append(errs, fmt.Errorf("APP_SHUTDOWN_TIMEOUT: %w", err))
-	case timeout <= 0:
-		errs = append(errs, errors.New("APP_SHUTDOWN_TIMEOUT must be positive"))
-	default:
-		cfg.ShutdownTimeout = timeout
+	duration := func(key, def string, dst *time.Duration) {
+		d, err := time.ParseDuration(get(key, def))
+		switch {
+		case err != nil:
+			errs = append(errs, fmt.Errorf("%s: %w", key, err))
+		case d <= 0:
+			errs = append(errs, fmt.Errorf("%s must be positive", key))
+		default:
+			*dst = d
+		}
+	}
+	duration("APP_SHUTDOWN_TIMEOUT", "15s", &cfg.ShutdownTimeout)
+	duration("APP_SESSION_LIFETIME", "168h", &cfg.SessionLifetime)
+	duration("APP_SESSION_IDLE_TIMEOUT", "24h", &cfg.SessionIdleTimeout)
+	if cfg.SessionIdleTimeout > cfg.SessionLifetime && cfg.SessionLifetime > 0 {
+		errs = append(errs, errors.New("APP_SESSION_IDLE_TIMEOUT must not exceed APP_SESSION_LIFETIME"))
 	}
 
 	if err := errors.Join(errs...); err != nil {

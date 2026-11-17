@@ -1,0 +1,63 @@
+{{define "content"}}
+<div class="page-header">
+  <div>
+    <h1>Your projects</h1>
+    <p class="muted">Signed in as {{.User.Email}}</p>
+  </div>
+  <a class="button" href="/projects/new">New project</a>
+</div>
+
+{{with .Data}}
+{{if .Projects}}
+<ul class="stats" aria-label="Summary">
+  <li class="stat"><span class="stat-value">{{len .Projects}}</span><span class="stat-label">Projects</span></li>
+  <li class="stat"><span class="stat-value">{{.Documented}}</span><span class="stat-label">Documented</span></li>
+  <li class="stat"><span class="stat-value">{{.TotalFiles}}</span><span class="stat-label">Files uploaded</span></li>
+</ul>
+
+<div class="table-wrap">
+<table class="project-table">
+  <caption class="visually-hidden">Your projects</caption>
+  <thead>
+    <tr>
+      <th scope="col">Project</th>
+      <th scope="col">Languages</th>
+      <th scope="col">Uploaded</th>
+      <th scope="col">Documentation</th>
+      <th scope="col">Last documentation update</th>
+      <th scope="col"><span class="visually-hidden">Actions</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Projects}}
+    <tr>
+      <th scope="row" data-label="Project">
+        <a href="/projects/{{.ID}}">{{.Name}}</a>
+        {{if .Description}}<span class="table-sub">{{.Description}}</span>{{end}}
+      </th>
+      <td data-label="Languages">
+        {{- if .Languages}}{{range $i, $l := .Languages}}{{if lt $i 3}}<span class="tag">{{$l.Language}}</span>{{end}}{{end}}{{if gt (len .Languages) 3}}<span class="muted small">+{{len (slice .Languages 3)}} more</span>{{end}}
+        {{- else if .PrimaryLanguage}}<span class="tag">{{.PrimaryLanguage}}</span>
+        {{- else}}<span class="muted">—</span>{{end -}}
+      </td>
+      <td data-label="Uploaded">{{if .UploadedAt.IsZero}}<span class="muted">Not yet</span>{{else}}<time datetime="{{isodate .UploadedAt}}">{{date .UploadedAt}}</time>{{end}}</td>
+      <td data-label="Documentation"><span class="status status-{{.Status}}">{{.StatusLabel}}</span></td>
+      <td data-label="Last documentation update">{{if .DocumentationUpdatedAt.IsZero}}<span class="muted">Never</span>{{else}}<time datetime="{{isodate .DocumentationUpdatedAt}}">{{date .DocumentationUpdatedAt}}</time>{{end}}</td>
+      <td class="row-actions">
+        <a href="/projects/{{.ID}}">View<span class="visually-hidden"> {{.Name}}</span></a>
+        <a href="/projects/{{.ID}}/delete" class="danger-link">Delete<span class="visually-hidden"> {{.Name}}</span></a>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<section class="empty-state card">
+  <h2>No projects yet</h2>
+  <p>Create a project to hold the source code you want documented.</p>
+  <p><a class="button" href="/projects/new">Create your first project</a></p>
+</section>
+{{end}}
+{{end}}
+{{end}}

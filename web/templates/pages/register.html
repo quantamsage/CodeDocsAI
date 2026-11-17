@@ -1,0 +1,38 @@
+{{define "content"}}
+<section class="auth-card card">
+  <h1>Create your account</h1>
+  <p class="muted">Sign up to upload code and generate documentation.</p>
+  {{with .Data}}
+  {{template "form-error" .Error}}
+  <form method="post" action="/register" class="form" novalidate>
+    <div class="field{{if index .Errors "email"}} has-error{{end}}">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required maxlength="254"
+             value="{{index .Values "email"}}"{{if index .Errors "email"}} aria-invalid="true" aria-describedby="email-error"{{end}} autofocus>
+      {{with index .Errors "email"}}<p class="field-error" id="email-error">{{.}}</p>{{end}}
+    </div>
+    <div class="field{{if index .Errors "display_name"}} has-error{{end}}">
+      <label for="display_name">Name <span class="muted small">(optional)</span></label>
+      <input id="display_name" name="display_name" type="text" autocomplete="name" maxlength="80"
+             value="{{index .Values "display_name"}}"{{if index .Errors "display_name"}} aria-invalid="true" aria-describedby="display_name-error"{{end}}>
+      {{with index .Errors "display_name"}}<p class="field-error" id="display_name-error">{{.}}</p>{{end}}
+    </div>
+    <div class="field{{if index .Errors "password"}} has-error{{end}}">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"
+             aria-describedby="password-hint{{if index .Errors "password"}} password-error{{end}}"{{if index .Errors "password"}} aria-invalid="true"{{end}}>
+      <p class="field-hint" id="password-hint">At least 8 characters.</p>
+      {{with index .Errors "password"}}<p class="field-error" id="password-error">{{.}}</p>{{end}}
+    </div>
+    <div class="field{{if index .Errors "password_confirm"}} has-error{{end}}">
+      <label for="password_confirm">Confirm password</label>
+      <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" required maxlength="128"
+             {{- if index .Errors "password_confirm"}} aria-invalid="true" aria-describedby="password_confirm-error"{{end}}>
+      {{with index .Errors "password_confirm"}}<p class="field-error" id="password_confirm-error">{{.}}</p>{{end}}
+    </div>
+    <button type="submit" class="button button-block">Create account</button>
+  </form>
+  {{end}}
+  <p class="small">Already have an account? <a href="/login">Log in</a></p>
+</section>
+{{end}}

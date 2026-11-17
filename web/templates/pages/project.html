@@ -1,0 +1,32 @@
+{{define "content"}}
+{{with .Data}}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a> <span aria-hidden="true">/</span> {{.Name}}</nav>
+<div class="page-header">
+  <div>
+    <h1>{{.Name}}</h1>
+    {{if .Description}}<p class="project-description">{{.Description}}</p>{{end}}
+  </div>
+  <a class="button button-danger" href="/projects/{{.ID}}/delete">Delete project</a>
+</div>
+
+<dl class="details card">
+  <div><dt>Documentation status</dt><dd><span class="status status-{{.Status}}">{{.StatusLabel}}</span></dd></div>
+  <div><dt>Languages</dt><dd>
+    {{- if .Languages}}{{range .Languages}}<span class="tag">{{.Language}} <span class="muted">({{.Files}})</span></span>{{end}}
+    {{- else if .PrimaryLanguage}}<span class="tag">{{.PrimaryLanguage}}</span>
+    {{- else}}<span class="muted">Detected after upload</span>{{end -}}
+  </dd></div>
+  <div><dt>Files</dt><dd>{{.FileCount}}{{if .TotalSizeBytes}} <span class="muted">({{bytes .TotalSizeBytes}})</span>{{end}}</dd></div>
+  <div><dt>Uploaded</dt><dd>{{if .UploadedAt.IsZero}}<span class="muted">Not yet</span>{{else}}<time datetime="{{isodate .UploadedAt}}">{{date .UploadedAt}}</time>{{end}}</dd></div>
+  <div><dt>Last documentation update</dt><dd>{{if .DocumentationUpdatedAt.IsZero}}<span class="muted">Never</span>{{else}}<time datetime="{{isodate .DocumentationUpdatedAt}}">{{date .DocumentationUpdatedAt}}</time>{{end}}</dd></div>
+  <div><dt>Created</dt><dd><time datetime="{{isodate .CreatedAt}}">{{date .CreatedAt}}</time></dd></div>
+</dl>
+
+{{if eq .Status "empty"}}
+<section class="empty-state card">
+  <h2>No files uploaded yet</h2>
+  <p>This project doesn't contain any source code yet. Upload source files or a ZIP archive to analyze and document it.</p>
+</section>
+{{end}}
+{{end}}
+{{end}}

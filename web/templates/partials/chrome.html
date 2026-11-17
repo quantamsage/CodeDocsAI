@@ -11,7 +11,21 @@
     </button>
     <nav id="site-nav" class="site-nav" aria-label="Main">
       <ul>
+        {{- if .User}}
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/projects/new">New project</a></li>
+        <li class="nav-user" title="{{.User.Email}}">{{.User.DisplayName}}</li>
+        <li>
+          <form method="post" action="/logout" class="nav-form">
+            {{template "csrf" .}}
+            <button type="submit" class="link-button">Log out</button>
+          </form>
+        </li>
+        {{- else}}
         <li><a href="/">Home</a></li>
+        <li><a href="/login">Log in</a></li>
+        <li><a href="/register">Sign up</a></li>
+        {{- end}}
       </ul>
     </nav>
   </div>

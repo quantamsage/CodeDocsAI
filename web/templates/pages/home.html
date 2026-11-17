@@ -5,6 +5,14 @@
     Upload source files or an entire project and CodeDocs AI analyzes the actual code to produce
     structured technical documentation: architecture, modules, functions, APIs, data models and setup.
   </p>
+  <p class="hero-actions">
+    {{- if .User}}
+    <a class="button" href="/dashboard">Go to your dashboard</a>
+    {{- else}}
+    <a class="button" href="/register">Get started</a>
+    <a class="button button-secondary" href="/login">Log in</a>
+    {{- end}}
+  </p>
 </section>
 
 <section aria-labelledby="how-heading">

@@ -1,0 +1,5 @@
+{{/* csrf renders the synchronizer token; call with the root view.Page. */}}
+{{define "csrf"}}<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">{{end}}
+
+{{/* form-error renders a form-level error message, if any. */}}
+{{define "form-error"}}{{if .}}<p class="form-alert" role="alert">{{.}}</p>{{end}}{{end}}

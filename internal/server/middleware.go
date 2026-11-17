@@ -16,6 +16,7 @@ type ctxKey int
 const (
 	ctxKeyRequestID ctxKey = iota
 	ctxKeyLogger
+	ctxKeySession
 )
 
 // RequestIDHeader is the response header carrying the request ID.

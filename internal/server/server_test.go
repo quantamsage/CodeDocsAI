@@ -16,23 +16,35 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quantamsage/ai-code-documentation-tool/internal/auth"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/config"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/database"
 )
 
 type testEnv struct {
-	srv  *Server
-	db   *sql.DB
-	logs *bytes.Buffer
+	srv   *Server
+	db    *sql.DB
+	logs  *bytes.Buffer
+	clock *fakeClock
 }
 
 func newTestEnv(t *testing.T) *testEnv {
+	t.Helper()
+	return newTestEnvWith(t, nil)
+}
+
+// newTestEnvWith builds a server with a fast password hasher and a fake
+// clock; tweak (if non-nil) may adjust the configuration first.
+func newTestEnvWith(t *testing.T, tweak func(*config.Config)) *testEnv {
 	t.Helper()
 	cfg, err := config.LoadFrom(func(string) string { return "" })
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.ShutdownTimeout = 2 * time.Second
+	if tweak != nil {
+		tweak(&cfg)
+	}
 
 	ctx := context.Background()
 	db, err := database.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
@@ -46,11 +58,16 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	logs := &bytes.Buffer{}
 	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	srv, err := New(cfg, db, log)
+	clock := newClock()
+	srv, err := New(cfg, db, log, WithAuthOptions(auth.Options{
+		Hasher:              auth.NewHasher(auth.Argon2Params{Memory: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}, 4),
+		MaxFailuresPerEmail: 3,
+		Now:                 clock.Now,
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &testEnv{srv: srv, db: db, logs: logs}
+	return &testEnv{srv: srv, db: db, logs: logs, clock: clock}
 }
 
 func (e *testEnv) do(t *testing.T, method, target string) *httptest.ResponseRecorder {

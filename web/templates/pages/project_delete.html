@@ -1,0 +1,15 @@
+{{define "content"}}
+{{$csrf := .CSRFToken}}
+{{with .Data}}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a> <span aria-hidden="true">/</span> <a href="/projects/{{.ID}}">{{.Name}}</a> <span aria-hidden="true">/</span> Delete</nav>
+<section class="card form-card danger-card">
+  <h1>Delete “{{.Name}}”?</h1>
+  <p>This permanently deletes the project and everything in it: {{.FileCount}} uploaded file(s), analysis results and generated documentation. This cannot be undone.</p>
+  <form method="post" action="/projects/{{.ID}}/delete" class="form-actions">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <button type="submit" class="button button-danger">Delete project</button>
+    <a href="/projects/{{.ID}}">Cancel</a>
+  </form>
+</section>
+{{end}}
+{{end}}

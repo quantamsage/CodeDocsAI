@@ -1,0 +1,22 @@
+{{define "content"}}
+<section class="auth-card card">
+  <h1>Log in</h1>
+  {{with .Data}}
+  {{template "form-error" .Error}}
+  <form method="post" action="/login" class="form">
+    {{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required maxlength="254"
+             value="{{index .Values "email"}}" autofocus>
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="128">
+    </div>
+    <button type="submit" class="button button-block">Log in</button>
+  </form>
+  {{end}}
+  <p class="small">New here? <a href="/register">Create an account</a></p>
+</section>
+{{end}}

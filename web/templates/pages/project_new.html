@@ -1,0 +1,29 @@
+{{define "content"}}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a> <span aria-hidden="true">/</span> New project</nav>
+<section class="card form-card">
+  <h1>New project</h1>
+  {{$csrf := .CSRFToken}}
+  {{with .Data}}
+  {{template "form-error" .Error}}
+  <form method="post" action="/projects" class="form" novalidate>
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <div class="field{{if index .Errors "name"}} has-error{{end}}">
+      <label for="name">Project name</label>
+      <input id="name" name="name" type="text" required maxlength="100" value="{{index .Values "name"}}"
+             {{- if index .Errors "name"}} aria-invalid="true" aria-describedby="name-error"{{end}} autofocus>
+      {{with index .Errors "name"}}<p class="field-error" id="name-error">{{.}}</p>{{end}}
+    </div>
+    <div class="field{{if index .Errors "description"}} has-error{{end}}">
+      <label for="description">Description <span class="muted small">(optional)</span></label>
+      <textarea id="description" name="description" rows="4" maxlength="2000"
+                {{- if index .Errors "description"}} aria-invalid="true" aria-describedby="description-error"{{end}}>{{index .Values "description"}}</textarea>
+      {{with index .Errors "description"}}<p class="field-error" id="description-error">{{.}}</p>{{end}}
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="button">Create project</button>
+      <a href="/dashboard">Cancel</a>
+    </div>
+  </form>
+  {{end}}
+</section>
+{{end}}

@@ -27,8 +27,22 @@ type Page struct {
 	Title string
 	// RequestID is shown on error pages to correlate with server logs.
 	RequestID string
+	// User is the signed-in user, or nil for anonymous visitors.
+	User *User
+	// CSRFToken must be included as the "csrf_token" field of every
+	// state-changing form submitted by a signed-in user.
+	CSRFToken string
+	// Flash is a one-shot status message (e.g. "Project created.").
+	Flash string
 	// Data is page-specific data.
 	Data any
+}
+
+// User is the signed-in user as seen by templates.
+type User struct {
+	ID          int64
+	Email       string
+	DisplayName string
 }
 
 // Renderer holds parsed page templates.
@@ -40,6 +54,17 @@ type Renderer struct {
 func New(fsys fs.FS) (*Renderer, error) {
 	base := template.New("").Funcs(template.FuncMap{
 		"year": func() int { return time.Now().Year() },
+		// date formats a timestamp for display; the zero time renders as "—".
+		"date": func(t time.Time) string {
+			if t.IsZero() {
+				return "—"
+			}
+			return t.UTC().Format("2 Jan 2006, 15:04 UTC")
+		},
+		// isodate formats a timestamp for a <time datetime="..."> attribute.
+		"isodate": func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
+		// bytes formats a byte count with a binary unit.
+		"bytes": formatBytes,
 	})
 
 	for _, pattern := range []string{"layouts/*.html", "partials/*.html"} {
@@ -99,4 +124,17 @@ func (r *Renderer) Render(w http.ResponseWriter, status int, name string, data P
 	w.WriteHeader(status)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+func formatBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }

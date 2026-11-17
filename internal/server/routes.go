@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/quantamsage/ai-code-documentation-tool/internal/view"
 	"github.com/quantamsage/ai-code-documentation-tool/web"
 )
 
@@ -18,13 +17,29 @@ func (s *Server) routes(mux *http.ServeMux) {
 
 	mux.Handle("GET /{$}", s.handle(s.home))
 
+	// Authentication.
+	mux.Handle("GET /register", s.handle(s.requireGuest(s.registerForm)))
+	mux.Handle("POST /register", s.handle(s.requireGuest(s.register)))
+	mux.Handle("GET /login", s.handle(s.requireGuest(s.loginForm)))
+	mux.Handle("POST /login", s.handle(s.login))
+	mux.Handle("POST /logout", s.handle(s.requireAuth(s.logout)))
+
+	// Dashboard and projects (signed-in users only; every lookup is owner-scoped).
+	mux.Handle("GET /dashboard", s.handle(s.requireAuth(s.dashboard)))
+	mux.Handle("GET /projects", http.RedirectHandler("/dashboard", http.StatusSeeOther))
+	mux.Handle("GET /projects/new", s.handle(s.requireAuth(s.newProjectForm)))
+	mux.Handle("POST /projects", s.handle(s.requireAuth(s.createProject)))
+	mux.Handle("GET /projects/{id}", s.handle(s.requireAuth(s.showProject)))
+	mux.Handle("GET /projects/{id}/delete", s.handle(s.requireAuth(s.confirmDeleteProject)))
+	mux.Handle("POST /projects/{id}/delete", s.handle(s.requireAuth(s.deleteProject)))
+
 	// Any unmatched GET renders the HTML 404 page. It is GET-only so that a
 	// known path requested with the wrong method gets the mux's 405 response.
 	mux.Handle("GET /", s.handle(func(http.ResponseWriter, *http.Request) error { return errNotFound() }))
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) error {
-	return s.views.Render(w, http.StatusOK, "home", view.Page{RequestID: requestIDFrom(r.Context())})
+	return s.views.Render(w, http.StatusOK, "home", s.page(r, "", nil))
 }
 
 // healthz reports liveness and database connectivity as JSON.

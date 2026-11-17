@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/quantamsage/ai-code-documentation-tool/internal/auth"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/config"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/projects"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/view"
 	"github.com/quantamsage/ai-code-documentation-tool/web"
 )
@@ -23,21 +25,54 @@ type Server struct {
 	log     *slog.Logger
 	views   *view.Renderer
 	handler http.Handler
+
+	authOpts auth.Options
+	auth     *auth.Service
+	projects *projects.Store
 }
 
+// Option customizes a Server (mainly for tests).
+type Option func(*Server)
+
+// WithAuthOptions overrides the auth service options (hasher cost, clock,
+// throttling). Session timeouts from the config are applied when the option
+// leaves them unset.
+func WithAuthOptions(o auth.Options) Option {
+	return func(s *Server) { s.authOpts = o }
+}
+
+// sessionPurgeInterval is how often expired sessions are deleted.
+const sessionPurgeInterval = 15 * time.Minute
+
 // New builds a Server with all routes and middleware configured.
-func New(cfg config.Config, db *sql.DB, log *slog.Logger) (*Server, error) {
+func New(cfg config.Config, db *sql.DB, log *slog.Logger, opts ...Option) (*Server, error) {
 	views, err := view.New(web.Templates())
 	if err != nil {
 		return nil, fmt.Errorf("load templates: %w", err)
 	}
 	s := &Server{cfg: cfg, db: db, log: log, views: views}
+	for _, o := range opts {
+		o(s)
+	}
+
+	if s.authOpts.SessionLifetime == 0 {
+		s.authOpts.SessionLifetime = cfg.SessionLifetime
+	}
+	if s.authOpts.IdleTimeout == 0 {
+		s.authOpts.IdleTimeout = cfg.SessionIdleTimeout
+	}
+	if s.authOpts.Log == nil {
+		s.authOpts.Log = log
+	}
+	s.auth = auth.NewService(db, s.authOpts)
+	s.projects = projects.NewStore(db, s.authOpts.Now)
 
 	mux := http.NewServeMux()
 	s.routes(mux)
 	// Order matters: request ID first so every later layer can log with it;
-	// recovery inside logging so panics are still logged as 500s.
-	s.handler = chain(mux, s.requestID, s.logRequests, s.recoverPanics, s.securityHeaders)
+	// recovery inside logging so panics are still logged as 500s; the
+	// cross-origin check runs before any session lookup or handler work.
+	s.handler = chain(mux, s.requestID, s.logRequests, s.recoverPanics, s.securityHeaders, s.crossOrigin, s.loadSession)
 	return s, nil
 }
 
@@ -68,6 +103,8 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		ErrorLog:          slog.NewLogLogger(s.log.Handler(), slog.LevelWarn),
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
+
+	go s.auth.RunPurge(ctx, sessionPurgeInterval)
 
 	errCh := make(chan error, 1)
 	go func() {
