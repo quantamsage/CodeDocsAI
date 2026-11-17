@@ -16,6 +16,8 @@ go run ./cmd/server
 
 The server listens on `http://localhost:8080`. On first start it creates `data/app.db` and applies database migrations automatically. The health check is at `GET /healthz`.
 
+Open the site, choose **Sign up** to create an account, and you're taken to your dashboard, where you can create, view and delete projects.
+
 Configuration comes from environment variables. See [.env.example](.env.example) for every option and its default.
 
 To build a binary:
