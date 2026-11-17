@@ -50,7 +50,7 @@ func TestMigrateCreatesSchema(t *testing.T) {
 		t.Fatalf("applied %v, want all %d migrations", applied, len(all))
 	}
 
-	for _, table := range []string{"users", "projects", "project_files", "documentation", "analysis_results", "jobs", "schema_migrations"} {
+	for _, table := range []string{"users", "projects", "project_files", "documentation", "analysis_results", "jobs", "sessions", "schema_migrations"} {
 		var name string
 		err := db.QueryRowContext(ctx,
 			`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
