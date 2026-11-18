@@ -5,8 +5,8 @@
 | Phase | Title | Status |
 |---|---|---|
 | 1 | Project Foundation and Architecture | ✅ Complete (approved) |
-| 2 | Authentication and User Dashboard | ✅ Complete (awaiting approval) |
-| 3 | Code Upload and Project Processing | Not started |
+| 2 | Authentication and User Dashboard | ✅ Complete (approved) |
+| 3 | Code Upload and Project Processing | ✅ Complete (awaiting approval) |
 | 4 | AI Integration and Codebase Analysis | Not started |
 | 5 | Documentation Generation | Not started |
 | 6 | Documentation Viewer and Export | Not started |
@@ -58,6 +58,28 @@ I also checked the ownership tests by temporarily breaking the owner filter in t
 
 I ran a manual smoke test with the built binary: a fresh DB migrated `[1 2]`; register → create project → dashboard → view → cross-site delete rejected (403) → delete → logout → dashboard redirects to login; the login cookie had the expected attributes; no errors were logged.
 
+## Phase 3 — completed
+
+- **Uploads** (`GET/POST /projects/{id}/upload`): individual files, multiple files, a whole folder (with its relative paths, via `webkitdirectory`) and `.zip` archives, in any combination. Optional target folder, and a choice between adding to (and overwriting within) the project or replacing all of its files. Each upload ends with a summary flash message: added, replaced and removed counts, plus skipped files with reasons.
+- **Safe ZIP extraction:** rejects path traversal, absolute and drive-letter paths, symlinks and special files, malicious names (control characters, reserved device names, invalid characters) and ZIP bombs (compression ratio, total uncompressed size, entry count). Skips encrypted entries and unsupported compression methods. Never trusts declared sizes. Preserves directory structure and strips a single wrapping folder.
+- **File processing:** language detection for Go, Python, JavaScript, TypeScript, Java, C, C++, Rust, PHP, Ruby and C#, plus other common languages. Identifies source files, configuration files, dependency manifests (by exact name, such as `go.mod`, `package.json`, `requirements.txt`, `Cargo.toml`, `pom.xml`, `*.csproj`) and documentation. Skips binaries and executables (by extension and magic number), unsupported types, nested archives, likely secrets and dependency/VCS folders.
+- **Configurable limits:** `APP_UPLOAD_MAX_REQUEST_SIZE`, `APP_UPLOAD_MAX_FILE_SIZE`, `APP_UPLOAD_MAX_FILES`, `APP_UPLOAD_MAX_TOTAL_SIZE`, `APP_UPLOAD_MAX_COMPRESSION_RATIO` and `APP_UPLOAD_TIMEOUT`. Sizes accept `KiB`/`MiB`/`GiB` suffixes.
+- **Secure storage:** contents go under server-generated names in `data/uploads/<project>/`, with paths kept only as metadata. Writes are transactional, and old blobs are cleaned up on overwrite, replace, failure and project deletion.
+- **Project stats:** the dashboard and project page now show the detected languages, file count, size, upload date and an "uploaded / not analyzed" status.
+- **Project explorer:** a collapsible directory tree (works without JS) with per-directory file counts and sizes, file-kind counts, and a file viewer with line numbers, metadata (language, kind, size, SHA-256, upload time), breadcrumbs and a sidebar tree.
+- **CSRF for streamed uploads:** the token is read from the first multipart part, or from the `X-CSRF-Token` header. Multipart is accepted only on the upload route.
+- **Progressive enhancement:** the upload page JS shows the selected file count and size, warns when the request limit would be exceeded, drops `node_modules`/`.git`/… from folder selections before sending, and disables the button while uploading. Without JS the form still works.
+
+### Tests
+
+`go test ./...` passes, and `go vet` and `gofmt` are clean. New coverage:
+
+- `internal/files`: path cleaning (accepted and rejected forms, including traversal, absolute, drive, control characters, reserved names, length and depth); classification of every required language plus manifests, config and docs; rejection of unsupported types; secret, ignored-dir and system-file detection; text, binary and executable sniffing; ZIP extraction preserving structure and stripping the common root; skipping each unsupported category with the right reason; rejecting traversal, absolute, drive, control-character, reserved-name, symlink and mixed archives; ZIP bomb detection; total-size, file-count and entry-count limits; corrupt archives; abort cleanup; blob store path validation, truncation and project removal; and the store's commit stats and language breakdown, merge, overwrite, replace, target folder, limit and ownership rejections (with no changes and no leftover blobs), owner-scoped reads, project data removal, tree building and kind counts.
+- `internal/server`: uploading single files, multiple files plus a folder, and a ZIP (structure preserved, `.env` skipped, uploaded HTML shown escaped); every rejection path (422 and nothing stored); CSRF (missing, forged, not first, sent as a file, header alternative, multipart refused on other routes); sign-in required; cross-user isolation for the upload form, the upload POST and the file view; replace and target folder; the request-size limit (413) and the project file limit; project deletion removing stored files; file URLs with spaces, `#` and encoded traversal; empty files; line splitting.
+- `internal/config`: upload limit defaults, overrides, validation and size parsing.
+
+I also ran a manual smoke test with the built binary over real HTTP (curl): register → create project → upload a ZIP of this repository's `internal/` folder plus `go.mod` → 40 files stored with their structure, Go and SQL detected on the dashboard, and the file viewer returned 200, with no errors logged.
+
 ## Architectural decisions
 
 - **Pure-Go SQLite (`modernc.org/sqlite`)** rather than `mattn/go-sqlite3`, so builds need no cgo or C toolchain. As a result, `go test -race` (which needs cgo) is not available on machines without a C compiler.
@@ -73,16 +95,28 @@ I ran a manual smoke test with the built binary: a fresh DB migrated `[1 2]`; re
 - **Owner-scoped queries return "not found" rather than "forbidden",** so the existence of other users' resources isn't revealed.
 - **In-memory login throttling.** It suits the single-binary deployment, but the counters reset on restart.
 - **`server.New` takes functional options** (`WithAuthOptions`) so tests can inject a fast hasher and a fake clock without changing the production wiring.
+- **Uploaded content lives on disk, not in SQLite.** It goes under random names in `data/uploads/<project>/`, with only metadata in `project_files`. User-supplied paths can never choose a disk location, and the database stays small.
+- **Streamed multipart parsing,** with the CSRF token as the first part, so uploads never need to be buffered and the form works without JavaScript.
+- **Skip rather than reject** for individual unsupported files (reported to the user), but **reject the whole upload** for anything unsafe (path traversal, symlinks, ZIP bombs) or over a limit. Real projects contain images and lock files, but an unsafe archive should never be partially imported.
+- **Likely secrets are never stored** (`.env`, private keys), so they can't leak into Phase 4 prompts or exports.
+- **Any upload sets the project status to `uploaded`,** because earlier analysis no longer matches the code.
 
 ## Outstanding tasks
 
-- Phase 3: uploads (single files, multiple files and ZIP), safe extraction, language and kind detection, storage and the project explorer. Deleting a project must also remove its stored files from disk. The store currently only deletes rows, because nothing is stored on disk yet.
+- Phase 4: AI provider interface, structural parsing, the batched analysis pipeline and background jobs. When analysis is running, uploads should be blocked or cancel the job; Phase 3 has no jobs yet, so it always resets the status to `uploaded`.
 
 ## Known issues / limitations
 
 - Login throttling is in memory, so it resets on restart and isn't shared between instances.
 - Registering with an email that already exists says so, which reveals that the account exists. This is a deliberate usability trade-off; login doesn't reveal it.
 - There's no password reset, email verification or account settings page, because the spec doesn't require them. Users can't edit a project's name or description yet.
-- The dashboard's language, upload and documentation fields show empty or "Not yet" values until Phases 3–5 fill them in.
+- The dashboard's documentation fields show "Not yet" values until Phases 4–5 fill them in.
+- Uploads are processed within the request (no progress bar beyond the button state). Large ZIPs take as long as validation and storage need, bounded by `APP_UPLOAD_TIMEOUT`.
+- If the process crashes between writing blobs and committing the transaction, those blobs are orphaned on disk. Nothing references them, and there's no garbage collector yet.
+- Only UTF-8 (or ASCII) text is accepted. Source files in other encodings, such as UTF-16 or Latin-1, are skipped as "not a UTF-8 text file".
+- `.h` headers are always counted as C, even in C++ projects.
+- The explorer has no per-file delete or rename. Re-upload a file to overwrite it, or use "Replace all existing project files".
+- Folder uploads rely on the `webkitdirectory` attribute, which the major browsers support. Without JavaScript, files in `node_modules`/`.git` are still sent (and then skipped by the server), so very large folders can hit the request size limit; zipping the project avoids this.
+- Shortened or nested archive formats (`.tar.gz`, `.7z`, `.rar`) aren't extracted; only `.zip` is supported.
 - Templates are embedded at build time, so template changes need a restart (no hot reload).
 - The race detector can't run in the current dev environment (no cgo).

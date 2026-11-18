@@ -11,6 +11,8 @@ internal/database/     SQLite connection (Open) and embedded migrations (Migrate
   migrations/          NNNN_description.sql, applied in order, each in its own transaction
 internal/auth/         accounts, argon2id password hashing, login throttling, server-side sessions
 internal/projects/     owner-scoped project store (create, get, list, delete)
+internal/files/        uploads: path cleaning, language/kind detection, safe ZIP extraction,
+                       blob storage on disk, owner-scoped file store and directory tree
 internal/view/         HTML template renderer (layout + partials + per-page sets)
 internal/server/       routing, middleware, centralized error handling, handlers
 web/                   embedded assets: templates/{layouts,partials,pages}, static/{css,js}
@@ -46,6 +48,28 @@ Routes use Go 1.22+ `ServeMux` patterns (`"GET /path/{id}"`). The catch-all `GET
 - **Route guards:** `requireAuth` redirects anonymous GETs to `/login?next=…`, where `next` is checked to be a local path to prevent open redirects. It sets `Cache-Control: no-store` and verifies CSRF. `requireGuest` sends signed-in users from `/login` and `/register` to `/dashboard`.
 - **Ownership:** every `projects.Store` method takes the owner's user ID and puts it in the `WHERE` clause. A project owned by someone else returns `ErrNotFound`, which becomes the same 404 as a missing project, so project IDs can't be probed. Future feature packages must follow the same pattern.
 - **Flash messages** are stored on the session row. `s.page(...)` shows them once and then clears them. Error pages never consume them.
+
+## Uploads and the project explorer
+
+Routes: `GET/POST /projects/{id}/upload` and `GET /projects/{id}/files/{path...}`. The project page (`GET /projects/{id}`) shows the file tree.
+
+**Request handling.** `acceptUpload` wraps `requireAuth` on the upload route. It caps the body at `APP_UPLOAD_MAX_REQUEST_SIZE` (an over-sized `Content-Length` is rejected at once), extends the connection's read and write deadlines and the request context to `APP_UPLOAD_TIMEOUT`, and marks the request as allowed to carry multipart. The body is streamed with `multipart.Reader`; it is never buffered whole or spooled by `ParseMultipartForm`. Because the CSRF token can't be read without consuming the stream, `verifyCSRF` requires it to be the **first** part (browsers send fields in document order, so the hidden input sits first in the form). The reader, now past that part, is passed to the handler through the request context. Scripted clients may send `X-CSRF-Token` instead. Other routes still reject multipart bodies with 415.
+
+**Parts.** `files` parts are individual files or `.zip` archives; `folder` parts come from a `webkitdirectory` input and carry relative paths. `multipart.Part.FileName` drops directories, so the raw `Content-Disposition` filename is used, and the selected folder's own name is stripped. Optional `directory` (target folder) and `replace` fields apply to the whole upload. Other archive formats are rejected.
+
+**Validation (`files.Batch`).** Each file is checked and written to storage one at a time, so memory is bounded by the per-file limit:
+
+1. `CleanPath` normalizes separators and rejects absolute paths, drive letters, `..`, control characters, invalid UTF-8, Windows reserved names and characters, and over-long or over-deep paths. An unsafe path **rejects the whole upload**.
+2. These are **skipped** and reported to the user: files in dependency, build or VCS folders (`node_modules`, `.git`, `.venv`, …); OS metadata files; likely secrets (`.env`, `.env.*` except templates such as `.env.example`, private keys, `.netrc`); nested archives; executables by extension or magic number (ELF, PE, Mach-O, Java class, Wasm); unknown types; non-UTF-8 or NUL-containing content; and files over the per-file limit.
+3. Exceeding the file-count or total-size limit **rejects the upload**.
+
+**ZIP archives** are spooled to a temporary file under `data/tmp` (the central directory is at the end) and read with `archive/zip`. Symbolic links, special files and unsafe names reject the archive. The number of entries is capped (10× the file limit, at least 1,000). Encrypted or unusually compressed entries are skipped. The declared size is used only to skip obviously oversized entries; actual reads are always limited. An entry that expands more than `APP_UPLOAD_MAX_COMPRESSION_RATIO` times its compressed size (after 256 KiB) rejects the archive as a ZIP bomb, and the total-size limit bounds the whole archive. If every file sits under one top-level folder, that folder is removed; the rest of the structure is preserved.
+
+**Classification.** `Classify` assigns a language and a kind (`source`, `config`, `manifest`, `documentation`) by exact file name first (`go.mod`, `package.json`, `Cargo.toml`, `Dockerfile`, `README`, …) and then by extension. It covers Go, Python, JavaScript, TypeScript, Java, C, C++, Rust, PHP, Ruby and C#, and several more. `.h` counts as C. The project's language breakdown counts source files only.
+
+**Storage.** Content is written to `data/uploads/<projectID>/<random>.blob` with `0600` permissions. Paths from the upload never select a location on disk; they are only metadata in `project_files`, and the blob store refuses any storage path that doesn't match its own naming pattern. `files.Store.Commit` records a batch in one transaction: it checks ownership, deletes existing rows (replace mode) or overwrites rows with the same path (merge mode), enforces the project-wide file and size limits, and updates the project's `file_count`, `total_size_bytes`, `languages_json`, `primary_language`, `status = 'uploaded'` and `uploaded_at`. Blobs of overwritten or replaced files are deleted after the commit; on failure the batch's new blobs are deleted. Deleting a project removes its upload directory after the rows are gone.
+
+**Explorer.** Every file query joins `projects` on `user_id`, so another user's files return 404. The tree is built in memory from the sorted file list and rendered with nested `<details>` (no JavaScript needed). Small projects are fully expanded; on file pages, the directories leading to the current file are open. The file viewer shows up to 512 KiB with CSS line numbers. Content is HTML-escaped by `html/template` and served as part of the page, never as a raw same-origin document.
 
 ## Templates
 

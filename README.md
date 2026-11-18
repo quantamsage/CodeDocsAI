@@ -18,6 +18,8 @@ The server listens on `http://localhost:8080`. On first start it creates `data/a
 
 Open the site, choose **Sign up** to create an account, and you're taken to your dashboard, where you can create, view and delete projects.
 
+Open a project and choose **Upload files** to add code. You can upload individual files, a whole project folder, or a `.zip` archive. The project page then shows the directory tree, the detected languages and file kinds, and each file can be opened in a viewer with line numbers. Uploaded code is stored as text under `data/uploads/` and is never executed. Dependency and version-control folders, binaries, nested archives and files that may hold secrets (such as `.env` and private keys) are skipped. Archives with unsafe paths, symbolic links or ZIP-bomb compression ratios are rejected. Upload limits are configurable (`APP_UPLOAD_*` in `.env.example`).
+
 Configuration comes from environment variables. See [.env.example](.env.example) for every option and its default.
 
 To build a binary:
