@@ -117,6 +117,6 @@ I also ran a manual smoke test with the built binary over real HTTP (curl): regi
 - `.h` headers are always counted as C, even in C++ projects.
 - The explorer has no per-file delete or rename. Re-upload a file to overwrite it, or use "Replace all existing project files".
 - Folder uploads rely on the `webkitdirectory` attribute, which the major browsers support. Without JavaScript, files in `node_modules`/`.git` are still sent (and then skipped by the server), so very large folders can hit the request size limit; zipping the project avoids this.
-- Shortened or nested archive formats (`.tar.gz`, `.7z`, `.rar`) aren't extracted; only `.zip` is supported.
+- Other archive formats (`.tar.gz`, `.7z`, `.rar`) aren't supported, and archives nested inside a ZIP aren't extracted. Only top-level `.zip` uploads are unpacked.
 - Templates are embedded at build time, so template changes need a restart (no hot reload).
 - The race detector can't run in the current dev environment (no cgo).
