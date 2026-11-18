@@ -6,7 +6,10 @@
     <h1>{{.Name}}</h1>
     {{if .Description}}<p class="project-description">{{.Description}}</p>{{end}}
   </div>
-  <a class="button button-danger" href="/projects/{{.ID}}/delete">Delete project</a>
+  <div class="header-actions">
+    <a class="button" href="/projects/{{.ID}}/upload">Upload files</a>
+    <a class="button button-danger" href="/projects/{{.ID}}/delete">Delete project</a>
+  </div>
 </div>
 
 <dl class="details card">
@@ -14,6 +17,7 @@
   <div><dt>Languages</dt><dd>
     {{- if .Languages}}{{range .Languages}}<span class="tag">{{.Language}} <span class="muted">({{.Files}})</span></span>{{end}}
     {{- else if .PrimaryLanguage}}<span class="tag">{{.PrimaryLanguage}}</span>
+    {{- else if .FileCount}}<span class="muted">No source files</span>
     {{- else}}<span class="muted">Detected after upload</span>{{end -}}
   </dd></div>
   <div><dt>Files</dt><dd>{{.FileCount}}{{if .TotalSizeBytes}} <span class="muted">({{bytes .TotalSizeBytes}})</span>{{end}}</dd></div>
@@ -22,10 +26,29 @@
   <div><dt>Created</dt><dd><time datetime="{{isodate .CreatedAt}}">{{date .CreatedAt}}</time></dd></div>
 </dl>
 
-{{if eq .Status "empty"}}
+{{if .FileCount}}
+<section id="files" class="card explorer" aria-labelledby="files-heading">
+  <div class="section-header">
+    <h2 id="files-heading">Files</h2>
+    <ul class="kind-counts" aria-label="Files by kind">
+      {{with .Kinds}}
+      {{if .Source}}<li><span class="kind kind-source">Source</span> {{.Source}}</li>{{end}}
+      {{if .Config}}<li><span class="kind kind-config">Config</span> {{.Config}}</li>{{end}}
+      {{if .Manifest}}<li><span class="kind kind-manifest">Dependencies</span> {{.Manifest}}</li>{{end}}
+      {{if .Documentation}}<li><span class="kind kind-documentation">Docs</span> {{.Documentation}}</li>{{end}}
+      {{if .Other}}<li><span class="kind kind-other">Other</span> {{.Other}}</li>{{end}}
+      {{end}}
+    </ul>
+  </div>
+  <div class="tree-root">
+    {{template "tree" .Tree}}
+  </div>
+</section>
+{{else}}
 <section class="empty-state card">
   <h2>No files uploaded yet</h2>
-  <p>This project doesn't contain any source code yet. Upload source files or a ZIP archive to analyze and document it.</p>
+  <p>This project doesn't contain any source code yet. Upload source files, a project folder or a ZIP archive to analyze and document it.</p>
+  <p><a class="button" href="/projects/{{.ID}}/upload">Upload files</a></p>
 </section>
 {{end}}
 {{end}}

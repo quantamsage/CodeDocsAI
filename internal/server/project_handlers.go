@@ -81,14 +81,6 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Server) showProject(w http.ResponseWriter, r *http.Request) error {
-	p, err := s.projectFromPath(r)
-	if err != nil {
-		return err
-	}
-	return s.views.Render(w, http.StatusOK, "project", s.page(r, p.Name, p))
-}
-
 func (s *Server) confirmDeleteProject(w http.ResponseWriter, r *http.Request) error {
 	p, err := s.projectFromPath(r)
 	if err != nil {
@@ -108,7 +100,13 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) error {
 		}
 		return err
 	}
-	loggerFrom(r.Context(), s.log).Info("project deleted", slog.Int64("project_id", p.ID))
+	log := loggerFrom(r.Context(), s.log)
+	// The rows are gone (cascade); now remove the stored file contents. A
+	// failure leaves orphaned blobs on disk but no reachable data.
+	if err := s.files.RemoveProjectData(p.ID); err != nil {
+		log.Error("remove project files from disk", slog.Int64("project_id", p.ID), slog.String("error", err.Error()))
+	}
+	log.Info("project deleted", slog.Int64("project_id", p.ID))
 	s.flash(r, "Project “"+p.Name+"” deleted.")
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	return nil

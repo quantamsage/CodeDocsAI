@@ -1,0 +1,20 @@
+{{/* tree renders a server.treeView directory recursively. Works without JS:
+     directories are native <details> elements. */}}
+{{define "tree"}}
+<ul class="tree" role="list">
+  {{- range .Dirs}}
+  <li class="tree-dir">
+    <details{{if .Open}} open{{end}}>
+      <summary><span class="tree-icon" aria-hidden="true">▸</span><span class="tree-name">{{.Name}}/</span> <span class="tree-meta">{{.FileCount}} · {{bytes .Size}}</span></summary>
+      {{template "tree" .}}
+    </details>
+  </li>
+  {{- end}}
+  {{- range .Files}}
+  <li class="tree-file{{if .Current}} is-current{{end}}">
+    <a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}><span class="tree-name">{{.Name}}</span></a>
+    <span class="tree-meta">{{if .Language}}{{.Language}} · {{end}}{{bytes .Size}}</span>
+  </li>
+  {{- end}}
+</ul>
+{{end}}

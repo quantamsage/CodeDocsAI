@@ -1,0 +1,58 @@
+{{define "content"}}
+{{$csrf := .CSRFToken}}
+{{with .Data}}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a> <span aria-hidden="true">/</span> <a href="/projects/{{.Project.ID}}">{{.Project.Name}}</a> <span aria-hidden="true">/</span> Upload</nav>
+<section class="card form-card">
+  <h1>Upload files to “{{.Project.Name}}”</h1>
+  <p class="muted">Upload individual source files, a whole project folder, or a project as a <code>.zip</code> archive. Files are stored as text and never executed.</p>
+  {{template "form-error" .Error}}
+
+  {{/* csrf_token must stay the first field: the server reads it before the files. */}}
+  <form method="post" action="/projects/{{.Project.ID}}/upload" enctype="multipart/form-data" class="form upload-form"
+        data-upload data-max-request="{{.MaxRequest}}">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+
+    <div class="field">
+      <label for="files">Files or ZIP archives</label>
+      <input id="files" name="files" type="file" multiple aria-describedby="files-hint">
+      <p class="field-hint" id="files-hint">Choose one or more source files, or a <code>.zip</code> of your project. Archives keep their folder structure.</p>
+    </div>
+
+    <div class="field">
+      <label for="folder">Or a project folder</label>
+      <input id="folder" name="folder" type="file" webkitdirectory multiple aria-describedby="folder-hint">
+      <p class="field-hint" id="folder-hint">Uploads every file in the folder with its sub-folders. Dependency and version-control folders such as <code>node_modules</code> and <code>.git</code> are left out.</p>
+    </div>
+
+    <p class="upload-summary muted small" data-upload-summary aria-live="polite" hidden></p>
+
+    <div class="field">
+      <label for="directory">Target folder <span class="muted small">(optional)</span></label>
+      <input id="directory" name="directory" type="text" maxlength="1024" placeholder="e.g. src/utils" value="{{.Directory}}" aria-describedby="directory-hint">
+      <p class="field-hint" id="directory-hint">Places the uploaded files inside this folder of the project. Leave empty for the project root.</p>
+    </div>
+
+    <div class="field field-check">
+      <input id="replace" name="replace" type="checkbox" value="1"{{if .Replace}} checked{{end}}>
+      <label for="replace">Replace all existing project files</label>
+    </div>
+    <p class="field-hint">Otherwise the upload is added to the project, and files with the same path are overwritten.</p>
+
+    <details class="limits">
+      <summary>Upload rules and limits</summary>
+      <ul>
+        <li>At most {{bytes .MaxRequest}} per upload, {{bytes .Limits.MaxFileBytes}} per file, {{.Limits.MaxFiles}} files and {{bytes .Limits.MaxTotalBytes}} per project.</li>
+        <li>Supported: source code (Go, Python, JavaScript, TypeScript, Java, C, C++, Rust, PHP, Ruby, C# and more), configuration files, dependency manifests and documentation.</li>
+        <li>Skipped: binaries and executables, images and other non-text files, nested archives, files that may contain secrets (such as <code>.env</code> or private keys), and dependency, build or version-control folders.</li>
+        <li>Rejected: archives with unsafe paths (such as <code>../</code>), symbolic links, or contents that expand suspiciously (ZIP bombs).</li>
+      </ul>
+    </details>
+
+    <div class="form-actions">
+      <button type="submit" class="button" data-upload-submit>Upload</button>
+      <a href="/projects/{{.Project.ID}}">Cancel</a>
+    </div>
+  </form>
+</section>
+{{end}}
+{{end}}

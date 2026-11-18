@@ -339,3 +339,67 @@ h1, h2, h3 { line-height: 1.25; }
 .empty-state h2 { margin-top: 0; }
 .empty-state p { color: var(--muted); }
 .danger-card { border-color: var(--danger); }
+
+/* --- Phase 3: uploads and project explorer --- */
+.header-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.section-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; }
+.section-header h2 { margin: 0; }
+
+.upload-form input[type="file"] {
+  width: 100%; padding: 0.75rem; border: 1px dashed var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--text); font: inherit;
+}
+.field-check { display: flex; align-items: center; gap: 0.5rem; }
+.field-check input { width: 1.1rem; height: 1.1rem; margin: 0; }
+.field-check label { font-weight: 600; }
+.upload-summary { margin: 0; }
+.limits { font-size: 0.9rem; color: var(--muted); }
+.limits summary { cursor: pointer; color: var(--text); font-weight: 600; }
+.limits ul { padding-left: 1.25rem; margin: 0.5rem 0 0; }
+.button[disabled] { opacity: 0.65; cursor: progress; }
+
+.kind-counts { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin: 0; padding: 0; font-size: 0.875rem; color: var(--muted); }
+.kind { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.05rem 0.5rem; border-radius: 999px; background: var(--bg); color: var(--muted); text-transform: capitalize; }
+.kind-source { background: var(--info-bg); color: var(--accent); }
+.kind-config { background: var(--warning-bg); color: var(--warning); }
+.kind-manifest { background: var(--success-bg); color: var(--success); }
+
+.explorer { margin-bottom: 1.5rem; }
+.tree-root { margin-top: 1rem; overflow-x: auto; }
+.tree { list-style: none; margin: 0; padding: 0; font-size: 0.925rem; }
+.tree .tree { padding-left: 1.1rem; border-left: 1px solid var(--border); margin-left: 0.45rem; }
+.tree li { margin: 0; }
+.tree summary { cursor: pointer; list-style: none; padding: 0.2rem 0.25rem; border-radius: 4px; display: flex; align-items: baseline; gap: 0.35rem; }
+.tree summary::-webkit-details-marker { display: none; }
+.tree summary:hover, .tree summary:focus-visible { background: var(--bg); }
+.tree-icon { display: inline-block; width: 0.8rem; color: var(--muted); transition: transform 0.1s; }
+details[open] > summary > .tree-icon { transform: rotate(90deg); }
+.tree-dir > details > summary .tree-name { font-weight: 600; }
+.tree-file { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.2rem 0.25rem 0.2rem 1.15rem; border-radius: 4px; }
+.tree-file a { text-decoration: none; overflow-wrap: anywhere; }
+.tree-file a:hover, .tree-file a:focus-visible { text-decoration: underline; }
+.tree-file.is-current { background: var(--info-bg); }
+.tree-file.is-current a { font-weight: 600; }
+.tree-meta { color: var(--muted); font-size: 0.8rem; white-space: nowrap; margin-left: auto; }
+
+.explorer-layout { display: grid; gap: 1.5rem; }
+.explorer-sidebar { max-height: 70vh; overflow: auto; }
+.sidebar-heading { font-size: 1rem; margin: 0 0 0.5rem; overflow-wrap: anywhere; }
+.file-view { min-width: 0; }
+.file-path { font-family: var(--mono); font-size: 1.2rem; margin: 0 0 0.5rem; overflow-wrap: anywhere; }
+.file-meta { list-style: none; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; margin: 0 0 1rem; padding: 0; color: var(--muted); font-size: 0.875rem; }
+.hash { font-size: 0.8rem; overflow-wrap: anywhere; }
+.code-wrap { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: auto; max-height: 80vh; }
+.code { margin: 0; padding: 0.75rem 0; counter-reset: line; line-height: 1.5; tab-size: 4; }
+.code .line { display: inline-block; min-width: 100%; padding-right: 1rem; }
+.code .line::before {
+  counter-increment: line; content: counter(line);
+  display: inline-block; width: 3.5rem; padding-right: 1rem; margin-right: 0.75rem; text-align: right;
+  color: var(--muted); border-right: 1px solid var(--border); user-select: none;
+}
+.code .line:hover { background: var(--bg); }
+
+@media (min-width: 60rem) {
+  .explorer-layout { grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr); align-items: start; }
+  .explorer-sidebar { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); }
+}

@@ -42,6 +42,7 @@ func newTestEnvWith(t *testing.T, tweak func(*config.Config)) *testEnv {
 		t.Fatal(err)
 	}
 	cfg.ShutdownTimeout = 2 * time.Second
+	cfg.DataDir = t.TempDir()
 	if tweak != nil {
 		tweak(&cfg)
 	}

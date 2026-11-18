@@ -17,6 +17,8 @@ const (
 	ctxKeyRequestID ctxKey = iota
 	ctxKeyLogger
 	ctxKeySession
+	ctxKeyMultipart
+	ctxKeyMultipartAllowed
 )
 
 // RequestIDHeader is the response header carrying the request ID.

@@ -1,0 +1,41 @@
+{{define "content"}}
+{{with .Data}}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  {{- range $i, $c := .Crumbs}}{{if $i}} <span aria-hidden="true">/</span> {{end}}{{if $c.URL}}<a href="{{$c.URL}}">{{$c.Name}}</a>{{else}}<span>{{$c.Name}}</span>{{end}}{{end -}}
+</nav>
+
+<div class="explorer-layout">
+  <aside class="card explorer-sidebar" aria-label="Project files">
+    <h2 class="sidebar-heading"><a href="/projects/{{.Project.ID}}#files">{{.Project.Name}}</a></h2>
+    {{template "tree" .Tree}}
+  </aside>
+
+  <article class="file-view">
+    <header class="file-header">
+      <h1 class="file-path">{{.File.Path}}</h1>
+      <ul class="file-meta" aria-label="File details">
+        {{if .File.Language}}<li>{{.File.Language}}</li>{{end}}
+        <li><span class="kind kind-{{.File.Kind}}">{{.File.Kind}}</span></li>
+        <li>{{bytes .File.Size}}</li>
+        <li>{{len .Lines}}{{if .Truncated}}+{{end}} lines</li>
+        <li title="SHA-256">SHA-256 <code class="hash">{{.File.SHA256}}</code></li>
+        <li>Uploaded <time datetime="{{isodate .File.CreatedAt}}">{{date .File.CreatedAt}}</time></li>
+      </ul>
+    </header>
+
+    {{if .Truncated}}
+    <p class="form-alert" role="status">This file is larger than {{bytes .ViewLimit}}; only the beginning is shown.</p>
+    {{end}}
+
+    {{if .Lines}}
+    <div class="code-wrap">
+      <pre class="code" tabindex="0" aria-label="Contents of {{.File.Path}}"><code>{{range .Lines}}<span class="line">{{.}}</span>
+{{end}}</code></pre>
+    </div>
+    {{else}}
+    <p class="empty-state card">This file is empty.</p>
+    {{end}}
+  </article>
+</div>
+{{end}}
+{{end}}

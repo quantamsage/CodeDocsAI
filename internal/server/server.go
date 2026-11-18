@@ -13,6 +13,7 @@ import (
 
 	"github.com/quantamsage/ai-code-documentation-tool/internal/auth"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/config"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/files"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/projects"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/view"
 	"github.com/quantamsage/ai-code-documentation-tool/web"
@@ -29,6 +30,7 @@ type Server struct {
 	authOpts auth.Options
 	auth     *auth.Service
 	projects *projects.Store
+	files    *files.Store
 }
 
 // Option customizes a Server (mainly for tests).
@@ -66,6 +68,7 @@ func New(cfg config.Config, db *sql.DB, log *slog.Logger, opts ...Option) (*Serv
 	}
 	s.auth = auth.NewService(db, s.authOpts)
 	s.projects = projects.NewStore(db, s.authOpts.Now)
+	s.files = files.NewStore(db, files.NewBlobStore(cfg.DataDir), s.authOpts.Now)
 
 	mux := http.NewServeMux()
 	s.routes(mux)

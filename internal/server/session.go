@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"io"
 	"log/slog"
 	"mime"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -124,7 +126,8 @@ func (s *Server) requireAuth(h handlerFunc) handlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 
 		if !isSafeMethod(r.Method) {
-			if err := s.verifyCSRF(w, r, cs); err != nil {
+			var err error
+			if r, err = s.verifyCSRF(w, r, cs); err != nil {
 				return err
 			}
 		}
@@ -150,19 +153,61 @@ func isSafeMethod(m string) bool {
 var errCSRF = &HTTPError{Status: http.StatusForbidden, Message: "Your form has expired. Please go back, reload the page and try again."}
 
 // verifyCSRF checks the synchronizer token from the X-CSRF-Token header or,
-// for urlencoded forms, the csrf_token field.
-func (s *Server) verifyCSRF(w http.ResponseWriter, r *http.Request, cs *currentSession) error {
+// for urlencoded forms, the csrf_token field. On routes that accept streamed
+// multipart uploads (see acceptUpload), the token must be the first part of
+// the body; the returned request then carries the multipart reader,
+// positioned after that part, for the handler to continue from.
+func (s *Server) verifyCSRF(w http.ResponseWriter, r *http.Request, cs *currentSession) (*http.Request, error) {
 	token := r.Header.Get("X-CSRF-Token")
 	if token == "" {
-		if err := parseForm(w, r); err != nil {
-			return err
+		if multipartAllowed(r) && isMultipart(r) {
+			mr, err := r.MultipartReader()
+			if err != nil {
+				return r, &HTTPError{Status: http.StatusBadRequest, Message: "The upload could not be read.", Err: err}
+			}
+			if token, err = readCSRFPart(mr); err != nil {
+				return r, err
+			}
+			r = r.WithContext(context.WithValue(r.Context(), ctxKeyMultipart, mr))
+		} else {
+			if err := parseForm(w, r); err != nil {
+				return r, err
+			}
+			token = r.PostForm.Get("csrf_token")
 		}
-		token = r.PostForm.Get("csrf_token")
 	}
 	if token == "" || subtle.ConstantTimeCompare([]byte(token), []byte(cs.session.CSRFToken)) != 1 {
-		return errCSRF
+		return r, errCSRF
 	}
-	return nil
+	return r, nil
+}
+
+// readCSRFPart reads the csrf_token field, which must be the first part of a
+// multipart body (browsers send fields in document order).
+func readCSRFPart(mr *multipart.Reader) (string, error) {
+	part, err := mr.NextPart()
+	if err != nil {
+		return "", errCSRF
+	}
+	defer part.Close()
+	if part.FormName() != "csrf_token" || part.FileName() != "" {
+		return "", errCSRF
+	}
+	raw, err := io.ReadAll(io.LimitReader(part, 256))
+	if err != nil {
+		return "", errCSRF
+	}
+	return string(raw), nil
+}
+
+func isMultipart(r *http.Request) bool {
+	ct, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return ct == "multipart/form-data"
+}
+
+func multipartAllowed(r *http.Request) bool {
+	ok, _ := r.Context().Value(ctxKeyMultipartAllowed).(bool)
+	return ok
 }
 
 // parseForm parses an application/x-www-form-urlencoded body with a size cap.
