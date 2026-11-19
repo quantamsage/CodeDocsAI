@@ -32,7 +32,8 @@
     <h2 id="analysis-heading">AI analysis and documentation</h2>
     <div class="header-actions">
       {{if .HasAnalysis}}<a class="button button-secondary" href="/projects/{{.ID}}/analysis">View analysis</a>{{end}}
-      {{if not .DocumentationUpdatedAt.IsZero}}<a class="button button-secondary" href="/projects/{{.ID}}/docs">View documentation</a>{{end}}
+      {{if not .DocumentationUpdatedAt.IsZero}}<a class="button button-secondary" href="/projects/{{.ID}}/docs">View documentation</a>
+      <a class="button button-secondary" href="/projects/{{.ID}}/docs/export.zip" download>Download docs (ZIP)</a>{{end}}
     </div>
   </div>
 

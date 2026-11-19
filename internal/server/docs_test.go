@@ -1,6 +1,9 @@
 package server
 
 import (
+	"archive/zip"
+	"bytes"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -152,4 +155,120 @@ func TestDocumentationOwnerIsolation(t *testing.T) {
 		wantStatus(t, mallory.get(project+path), http.StatusNotFound)
 	}
 	wantStatus(t, mallory.postCSRF(project+"/docs/generate", nil), http.StatusNotFound)
+}
+
+func TestDocumentViewerRendersMarkdown(t *testing.T) {
+	_, c, project := setupDocumented(t)
+	rec := c.get(project + "/docs/project?key=architecture")
+	wantStatus(t, rec, http.StatusOK)
+	wantBody(t, rec,
+		`<h1 id="doc-architecture">Architecture</h1>`, `<h2 id="doc-details">Details</h2>`,
+		`On this page`, `<a href="#doc-details">Details</a>`,
+		`<blockquote>`, `<strong>Assumption:</strong>`,
+		`<pre class="code-block hl" data-lang="go"><code><span class="hl-kd">func</span>`,
+		`<!-- raw HTML omitted -->`,
+		`rel="prev"`, `Project Overview`, `rel="next"`, `Directory and File Documentation`,
+		`href="`+project+`/docs/project/download?key=architecture&amp;version=1"`,
+		`href="`+project+`/docs/export.zip"`,
+		`/static/css/highlight.css`,
+	)
+	body := rec.Body.String()
+	if strings.Contains(body, "<img src=x") || strings.Contains(body, "markdown-source") {
+		t.Error("document not rendered safely")
+	}
+	// The first document has no "previous" link.
+	if strings.Contains(c.get(project+"/docs/project?key=overview").Body.String(), `rel="prev"`) {
+		t.Error("first document has a previous link")
+	}
+	wantBody(t, c.get(project+"/docs"), `href="`+project+`/docs/project/download?key=overview"`, "Download all (ZIP)")
+}
+
+func TestDownloadMarkdown(t *testing.T) {
+	_, c, project := setupDocumented(t)
+	rec := c.get(project + "/docs/project/download?key=overview")
+	wantStatus(t, rec, http.StatusOK)
+	if ct := rec.Header().Get("Content-Type"); ct != "text/markdown; charset=utf-8" {
+		t.Errorf("content type %q", ct)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); cd != "attachment; filename=service-project-overview.md" {
+		t.Errorf("content disposition %q", cd)
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("headers %v", rec.Header())
+	}
+	body := rec.Body.String()
+	if !strings.HasPrefix(body, "# Project Overview\n\n## Details\n") || !strings.Contains(body, "```go\nfunc main() {}\n```\n") {
+		t.Errorf("markdown = %q", body)
+	}
+	wantStatus(t, c.get(project+"/docs/project/download?key=overview&version=1"), http.StatusOK)
+	wantStatus(t, c.get(project+"/docs/project/download?key=overview&version=2"), http.StatusNotFound)
+	wantStatus(t, c.get(project+"/docs/module/download?key=nope"), http.StatusNotFound)
+}
+
+func TestExportZip(t *testing.T) {
+	env, c, project := setupDocumented(t)
+	wantRedirect(t, c.postCSRF(project+"/docs/generate", url.Values{"scope": {"file"}, "key": {"main.go"}}), project+"#analysis")
+	env.runJobs(t)
+
+	rec := c.get(project + "/docs/export.zip")
+	wantStatus(t, rec, http.StatusOK)
+	if rec.Header().Get("Content-Type") != "application/zip" || rec.Header().Get("Content-Disposition") != "attachment; filename=service-docs.zip" {
+		t.Errorf("headers %v", rec.Header())
+	}
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := map[string]string{}
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(rc)
+		rc.Close()
+		entries[f.Name] = string(b)
+	}
+	for _, name := range []string{
+		"service-docs/README.md", "service-docs/sections/01-overview.md", "service-docs/sections/02-architecture.md",
+		"service-docs/sections/04-api.md", "service-docs/modules/root.md", "service-docs/files/main.go.md",
+	} {
+		if _, ok := entries[name]; !ok {
+			t.Errorf("missing %s in %v", name, entries)
+		}
+	}
+	if _, ok := entries["service-docs/sections/05-database.md"]; ok {
+		t.Error("database section exported for a project without one")
+	}
+	if !strings.Contains(entries["service-docs/README.md"], "- [Project Overview](sections/01-overview.md) (version 1)") {
+		t.Errorf("README = %s", entries["service-docs/README.md"])
+	}
+	if !strings.Contains(entries["service-docs/files/main.go.md"], "```go\nfunc main() {}\n```") {
+		t.Errorf("file doc = %q", entries["service-docs/files/main.go.md"])
+	}
+}
+
+func TestExportWithoutDocs(t *testing.T) {
+	_, c, project := setupAnalyzed(t, fakeDocsAI())
+	wantStatus(t, c.get(project+"/docs/export.zip"), http.StatusNotFound)
+	if strings.Contains(c.get(project+"/docs").Body.String(), "Download all") {
+		t.Error("export offered without documents")
+	}
+}
+
+func TestDocumentDownloadsOwnerIsolation(t *testing.T) {
+	env, _, project := setupDocumented(t)
+	mallory := env.client(t)
+	mallory.register("mallory@example.com", "correct horse")
+	for _, path := range []string{"/docs/export.zip", "/docs/project/download?key=overview", "/docs/project/download?key=overview&version=1"} {
+		rec := mallory.get(project + path)
+		wantStatus(t, rec, http.StatusNotFound)
+		if rec.Header().Get("Content-Disposition") != "" {
+			t.Errorf("%s: sent an attachment", path)
+		}
+	}
+	anon := env.client(t)
+	if rec := anon.get(project + "/docs/export.zip"); rec.Code != http.StatusSeeOther {
+		t.Errorf("anonymous export: %d", rec.Code)
+	}
 }

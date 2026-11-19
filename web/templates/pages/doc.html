@@ -15,6 +15,10 @@
       <p class="muted small">
         Version {{.Doc.Version}}{{if not .Current}} (an older version){{end}} · generated <time datetime="{{isodate .Doc.CreatedAt}}">{{date .Doc.CreatedAt}}</time>{{if .Doc.Model}} by {{.Doc.Model}}{{end}}
       </p>
+      <div class="header-actions doc-actions">
+        <a class="button button-secondary" href="{{.DownloadURL}}" download>Download Markdown</a>
+        <a class="button button-secondary" href="/projects/{{.Project.ID}}/docs/export.zip" download>Download all (ZIP)</a>
+      </div>
       {{if gt (len .Versions) 1}}
       <details class="versions">
         <summary>Versions ({{len .Versions}})</summary>
@@ -22,10 +26,23 @@
       </details>
       {{end}}
     </header>
-    {{if .Content}}
+
+    {{if .TOC}}
+    <nav class="card doc-toc" aria-labelledby="toc-heading">
+      <h2 id="toc-heading" class="sidebar-heading">On this page</h2>
+      <ol>
+        {{range .TOC}}<li class="toc-level-{{.Level}}"><a href="#{{.ID}}">{{.Text}}</a></li>{{end}}
+      </ol>
+    </nav>
+    {{end}}
+
     <div class="markdown-body">{{.Content}}</div>
-    {{else}}
-    <pre class="markdown-source">{{.Doc.Markdown}}</pre>
+
+    {{if or .Prev .Next}}
+    <nav class="doc-pager" aria-label="Previous and next document">
+      {{with .Prev}}<a class="doc-pager-prev" href="{{.URL}}" rel="prev"><span class="muted small">Previous</span><span>{{.Title}}</span></a>{{end}}
+      {{with .Next}}<a class="doc-pager-next" href="{{.URL}}" rel="next"><span class="muted small">Next</span><span>{{.Title}}</span></a>{{end}}
+    </nav>
     {{end}}
   </article>
 </div>

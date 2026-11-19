@@ -7,14 +7,17 @@
     <h1>Documentation</h1>
     {{if not .Project.DocumentationUpdatedAt.IsZero}}<p class="muted small">Last updated <time datetime="{{isodate .Project.DocumentationUpdatedAt}}">{{date .Project.DocumentationUpdatedAt}}</time></p>{{end}}
   </div>
+  <div class="header-actions">
+  {{if or .Sections .Modules .Files}}<a class="button button-secondary" href="/projects/{{.Project.ID}}/docs/export.zip" download>Download all (ZIP)</a>{{end}}
   {{if .CanGenerate}}
-  <form method="post" action="/projects/{{.Project.ID}}/docs/generate">
+  <form method="post" action="/projects/{{.Project.ID}}/docs/generate" class="inline-form">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
     <input type="hidden" name="scope" value="all">
     <input type="hidden" name="return" value="/projects/{{.Project.ID}}/docs">
     <button type="submit" class="button">{{if .Sections}}Regenerate all{{else}}Generate documentation{{end}}</button>
   </form>
   {{end}}
+  </div>
 </div>
 
 {{with .Job}}{{if .Active}}
@@ -38,6 +41,7 @@
     <li>
       <a href="{{.URL}}">{{.Title}}</a>
       <span class="muted small">version {{.Version}} · <time datetime="{{isodate .CreatedAt}}">{{date .CreatedAt}}</time></span>
+      <a class="small" href="{{.DownloadURL}}" download>Markdown</a>
       {{template "doc-regenerate" (dict "ProjectID" $p.ID "Scope" "project" "Key" .Key "CSRF" $csrf "Enabled" $.Data.CanGenerate)}}
     </li>
     {{end}}
@@ -57,6 +61,7 @@
     <li>
       <a href="{{.URL}}"><code>{{.Key}}</code></a>
       <span class="muted small">version {{.Version}} · <time datetime="{{isodate .CreatedAt}}">{{date .CreatedAt}}</time></span>
+      <a class="small" href="{{.DownloadURL}}" download>Markdown</a>
       {{template "doc-regenerate" (dict "ProjectID" $p.ID "Scope" "module" "Key" .Key "CSRF" $csrf "Enabled" $.Data.CanGenerate)}}
     </li>
     {{end}}
@@ -72,6 +77,7 @@
     <li>
       <a href="{{.URL}}"><code>{{.Key}}</code></a>
       <span class="muted small">version {{.Version}} · <time datetime="{{isodate .CreatedAt}}">{{date .CreatedAt}}</time></span>
+      <a class="small" href="{{.DownloadURL}}" download>Markdown</a>
       {{template "doc-regenerate" (dict "ProjectID" $p.ID "Scope" "file" "Key" .Key "CSRF" $csrf "Enabled" $.Data.CanGenerate)}}
     </li>
     {{end}}

@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -11,6 +13,7 @@ import (
 	"github.com/quantamsage/ai-code-documentation-tool/internal/analysis"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/docs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/jobs"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/markdown"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/projects"
 )
 
@@ -21,6 +24,15 @@ func docURL(projectID int64, scope, key string, version int) string {
 		q.Set("version", strconv.Itoa(version))
 	}
 	return projectURL(projectID) + "/docs/" + url.PathEscape(scope) + "?" + q.Encode()
+}
+
+// docDownloadURL is the Markdown download URL of a document version.
+func docDownloadURL(projectID int64, scope, key string, version int) string {
+	q := url.Values{"key": {key}}
+	if version > 0 {
+		q.Set("version", strconv.Itoa(version))
+	}
+	return projectURL(projectID) + "/docs/" + url.PathEscape(scope) + "/download?" + q.Encode()
 }
 
 // generateDocs queues documentation generation: everything, one section,
@@ -83,12 +95,13 @@ func (s *Server) generateDocs(w http.ResponseWriter, r *http.Request) error {
 }
 
 type docEntry struct {
-	Scope     string
-	Key       string
-	Title     string
-	Version   int
-	CreatedAt time.Time
-	URL       string
+	Scope       string
+	Key         string
+	Title       string
+	Version     int
+	CreatedAt   time.Time
+	URL         string
+	DownloadURL string
 }
 
 type docsIndexView struct {
@@ -115,7 +128,8 @@ func (s *Server) docsIndex(w http.ResponseWriter, r *http.Request) error {
 	}
 	v := docsIndexView{Project: p, AIEnabled: s.ai != nil}
 	for _, d := range current {
-		entry := docEntry{Scope: d.Scope, Key: d.Key, Title: d.Title, Version: d.Version, CreatedAt: d.CreatedAt, URL: docURL(p.ID, d.Scope, d.Key, 0)}
+		entry := docEntry{Scope: d.Scope, Key: d.Key, Title: d.Title, Version: d.Version, CreatedAt: d.CreatedAt,
+			URL: docURL(p.ID, d.Scope, d.Key, 0), DownloadURL: docDownloadURL(p.ID, d.Scope, d.Key, 0)}
 		switch d.Scope {
 		case docs.ScopeProject:
 			v.Sections = append(v.Sections, entry)
@@ -148,35 +162,44 @@ func (s *Server) docsIndex(w http.ResponseWriter, r *http.Request) error {
 }
 
 type docView struct {
-	Project  projects.Project
-	Doc      docs.Doc
-	Versions []docEntry
-	Current  bool
-	Nav      []docEntry
-	Content  any // rendered HTML (Phase 6) or nil
+	Project     projects.Project
+	Doc         docs.Doc
+	Versions    []docEntry
+	Current     bool
+	Nav         []docEntry
+	Prev, Next  *docEntry
+	Content     any // sanitized HTML from markdown.Render
+	TOC         []markdown.Heading
+	DownloadURL string
+}
+
+// docFromRequest loads the document version named by the URL: the scope
+// path value and the key and optional version query parameters.
+func (s *Server) docFromRequest(r *http.Request) (projects.Project, docs.Doc, error) {
+	p, err := s.projectFromPath(r)
+	if err != nil {
+		return p, docs.Doc{}, err
+	}
+	version := 0
+	if raw := r.URL.Query().Get("version"); raw != "" {
+		if version, err = strconv.Atoi(raw); err != nil || version < 1 {
+			return p, docs.Doc{}, errNotFound()
+		}
+	}
+	d, err := s.docs.Get(r.Context(), p.UserID, p.ID, r.PathValue("scope"), r.URL.Query().Get("key"), version)
+	if errors.Is(err, docs.ErrNotFound) {
+		return p, d, errNotFound()
+	}
+	return p, d, err
 }
 
 // showDoc renders one document version.
 func (s *Server) showDoc(w http.ResponseWriter, r *http.Request) error {
-	p, err := s.projectFromPath(r)
+	p, d, err := s.docFromRequest(r)
 	if err != nil {
 		return err
 	}
-	scope := r.PathValue("scope")
-	key := r.URL.Query().Get("key")
-	version := 0
-	if raw := r.URL.Query().Get("version"); raw != "" {
-		if version, err = strconv.Atoi(raw); err != nil || version < 1 {
-			return errNotFound()
-		}
-	}
-	d, err := s.docs.Get(r.Context(), p.UserID, p.ID, scope, key, version)
-	if errors.Is(err, docs.ErrNotFound) {
-		return errNotFound()
-	}
-	if err != nil {
-		return err
-	}
+	scope, key := d.Scope, d.Key
 	history, err := s.docs.Versions(r.Context(), p.UserID, p.ID, scope, key)
 	if err != nil {
 		return err
@@ -185,12 +208,85 @@ func (s *Server) showDoc(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	v := docView{Project: p, Doc: d, Current: len(history) > 0 && history[0].Version == d.Version}
+	rendered, err := markdown.Render(d.Markdown)
+	if err != nil {
+		return err
+	}
+	v := docView{Project: p, Doc: d, Current: len(history) > 0 && history[0].Version == d.Version,
+		Content: rendered.HTML, TOC: rendered.TOC, DownloadURL: docDownloadURL(p.ID, scope, key, d.Version)}
 	for _, h := range history {
 		v.Versions = append(v.Versions, docEntry{Version: h.Version, CreatedAt: h.CreatedAt, URL: docURL(p.ID, scope, key, h.Version)})
 	}
-	for _, c := range current {
+	for i, c := range current {
 		v.Nav = append(v.Nav, docEntry{Scope: c.Scope, Key: c.Key, Title: c.Title, URL: docURL(p.ID, c.Scope, c.Key, 0)})
+		if c.Scope == scope && c.Key == key {
+			if i > 0 {
+				prev := current[i-1]
+				v.Prev = &docEntry{Title: prev.Title, URL: docURL(p.ID, prev.Scope, prev.Key, 0)}
+			}
+			if i+1 < len(current) {
+				next := current[i+1]
+				v.Next = &docEntry{Title: next.Title, URL: docURL(p.ID, next.Scope, next.Key, 0)}
+			}
+		}
 	}
 	return s.views.Render(w, http.StatusOK, "doc", s.page(r, d.Title+" · "+p.Name, v))
+}
+
+// attachment sets download headers. The file name is passed through
+// mime.FormatMediaType, which quotes or RFC 2231-encodes it as needed.
+func attachment(w http.ResponseWriter, contentType, filename string) {
+	h := w.Header()
+	h.Set("Content-Type", contentType)
+	h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
+	h.Set("X-Content-Type-Options", "nosniff")
+}
+
+// downloadDoc sends one document version as a Markdown file.
+func (s *Server) downloadDoc(w http.ResponseWriter, r *http.Request) error {
+	p, d, err := s.docFromRequest(r)
+	if err != nil {
+		return err
+	}
+	body := d.Markdown
+	if len(body) > 0 && body[len(body)-1] != '\n' {
+		body += "\n"
+	}
+	attachment(w, "text/markdown; charset=utf-8", docs.DownloadName(p.Name, d))
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	_, err = w.Write([]byte(body))
+	return err
+}
+
+// exportDocs sends the current version of every document as a ZIP archive.
+func (s *Server) exportDocs(w http.ResponseWriter, r *http.Request) error {
+	p, err := s.projectFromPath(r)
+	if err != nil {
+		return err
+	}
+	current, err := s.docs.Current(r.Context(), p.UserID, p.ID)
+	if err != nil {
+		return err
+	}
+	if len(current) == 0 {
+		return &HTTPError{Status: http.StatusNotFound, Message: "This project has no documentation to export yet."}
+	}
+	// Build in memory so a failure can still produce an error page; the
+	// archive is bounded by the documents' capped size.
+	var buf bytes.Buffer
+	if err := docs.WriteZip(&buf, p.Name, current, s.now()); err != nil {
+		return err
+	}
+	attachment(w, "application/zip", docs.Slug(p.Name)+"-docs.zip")
+	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
+	_, err = w.Write(buf.Bytes())
+	return err
+}
+
+// now is the server clock (fake in tests).
+func (s *Server) now() time.Time {
+	if s.authOpts.Now != nil {
+		return s.authOpts.Now()
+	}
+	return time.Now()
 }

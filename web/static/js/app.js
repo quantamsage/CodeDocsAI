@@ -95,6 +95,34 @@
     initNavToggle();
     initUploadForm();
     initJobStatus();
+    initCopyCode();
+  }
+
+  // Adds a "Copy" button to documentation code blocks. Text is read with
+  // textContent, so nothing from the page is ever interpreted as HTML.
+  function initCopyCode() {
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") return;
+    var blocks = document.querySelectorAll(".markdown-body pre.code-block");
+    Array.prototype.forEach.call(blocks, function (pre) {
+      var wrapper = document.createElement("div");
+      wrapper.className = "code-wrapper";
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "copy-code";
+      button.textContent = "Copy";
+      button.setAttribute("aria-label", "Copy code to clipboard");
+      button.addEventListener("click", function () {
+        navigator.clipboard.writeText(pre.textContent).then(function () {
+          button.textContent = "Copied";
+        }, function () {
+          button.textContent = "Copy failed";
+        });
+        setTimeout(function () { button.textContent = "Copy"; }, 2000);
+      });
+      wrapper.appendChild(button);
+    });
   }
 
   // Polls a running job's progress and reloads the page when it finishes,
