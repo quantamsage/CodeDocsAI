@@ -65,6 +65,9 @@ func New(fsys fs.FS) (*Renderer, error) {
 		"isodate": func(t time.Time) string { return t.UTC().Format(time.RFC3339) },
 		// bytes formats a byte count with a binary unit.
 		"bytes": formatBytes,
+		// dict builds a map from key/value pairs, to pass several values to a
+		// sub-template: {{template "x" (dict "a" 1 "b" .Name)}}.
+		"dict": dict,
 	})
 
 	for _, pattern := range []string{"layouts/*.html", "partials/*.html"} {
@@ -137,4 +140,19 @@ func formatBytes(n int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+func dict(pairs ...any) (map[string]any, error) {
+	if len(pairs)%2 != 0 {
+		return nil, fmt.Errorf("dict: odd number of arguments")
+	}
+	m := make(map[string]any, len(pairs)/2)
+	for i := 0; i < len(pairs); i += 2 {
+		key, ok := pairs[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("dict: key %v is not a string", pairs[i])
+		}
+		m[key] = pairs[i+1]
+	}
+	return m, nil
 }

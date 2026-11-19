@@ -15,6 +15,7 @@ import (
 	"github.com/quantamsage/ai-code-documentation-tool/internal/analysis"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/auth"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/config"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/docs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/files"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/jobs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/projects"
@@ -39,6 +40,7 @@ type Server struct {
 	aiSet    bool
 	jobs     *jobs.Queue
 	analysis *analysis.Store
+	docs     *docs.Store
 }
 
 // Option customizes a Server (mainly for tests).
@@ -94,9 +96,13 @@ func New(cfg config.Config, db *sql.DB, log *slog.Logger, opts ...Option) (*Serv
 		s.ai = provider
 	}
 	s.analysis = analysis.NewStore(db, s.authOpts.Now)
-	s.jobs = jobs.New(db, jobs.Options{Now: s.authOpts.Now, Log: log, Classify: analysis.Classify})
+	s.docs = docs.NewStore(db, s.authOpts.Now)
+	s.jobs = jobs.New(db, jobs.Options{Now: s.authOpts.Now, Log: log, Classify: classifyJobError})
 	s.jobs.Register(analysis.JobType, (&analysis.Analyzer{
 		Files: s.files, Store: s.analysis, Provider: s.ai, BatchTokens: cfg.AI.BatchTokens, Log: log,
+	}).Definition())
+	s.jobs.Register(docs.JobType, (&docs.Generator{
+		Analysis: s.analysis, Store: s.docs, Provider: s.ai, BatchTokens: cfg.AI.BatchTokens, Log: log,
 	}).Definition())
 
 	mux := http.NewServeMux()
@@ -161,4 +167,12 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		return err
 	}
 	return nil
+}
+
+// classifyJobError decides retries and user messages for job failures.
+func classifyJobError(err error) jobs.Outcome {
+	if outcome, ok := docs.Classify(err); ok {
+		return outcome
+	}
+	return analysis.Classify(err)
 }

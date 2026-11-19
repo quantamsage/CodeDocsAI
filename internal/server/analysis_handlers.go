@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/quantamsage/ai-code-documentation-tool/internal/analysis"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/docs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/jobs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/projects"
 )
@@ -49,6 +50,7 @@ func (s *Server) analyzeProject(w http.ResponseWriter, r *http.Request) error {
 type jobJSON struct {
 	ID        int64     `json:"id"`
 	Type      string    `json:"type"`
+	Label     string    `json:"label"`
 	Status    string    `json:"status"`
 	Active    bool      `json:"active"`
 	Percent   int       `json:"percent"`
@@ -62,9 +64,19 @@ type jobJSON struct {
 
 func toJobJSON(j jobs.Job) jobJSON {
 	return jobJSON{
-		ID: j.ID, Type: j.Type, Status: j.Status, Active: j.Active(), Percent: j.Percent(), Current: j.ProgressCurrent,
+		ID: j.ID, Type: j.Type, Label: jobLabel(j.Type), Status: j.Status, Active: j.Active(), Percent: j.Percent(), Current: j.ProgressCurrent,
 		Total: j.ProgressTotal, Message: j.ProgressMessage, Error: j.Error, Attempts: j.Attempts, UpdatedAt: j.UpdatedAt,
 	}
+}
+
+func jobLabel(jobType string) string {
+	switch jobType {
+	case analysis.JobType:
+		return "Analysis"
+	case docs.JobType:
+		return "Documentation"
+	}
+	return jobType
 }
 
 // latestJob returns the project's most recent job as JSON.

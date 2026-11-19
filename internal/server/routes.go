@@ -44,6 +44,11 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("GET /projects/{id}/jobs/latest", s.handle(s.requireAuth(s.latestJob)))
 	mux.Handle("POST /projects/{id}/jobs/{jobID}/cancel", s.handle(s.requireAuth(s.cancelJob)))
 
+	// Documentation.
+	mux.Handle("POST /projects/{id}/docs/generate", s.handle(s.requireAuth(s.generateDocs)))
+	mux.Handle("GET /projects/{id}/docs", s.handle(s.requireAuth(s.docsIndex)))
+	mux.Handle("GET /projects/{id}/docs/{scope}", s.handle(s.requireAuth(s.showDoc)))
+
 	// Any unmatched GET renders the HTML 404 page. It is GET-only so that a
 	// known path requested with the wrong method gets the mux's 405 response.
 	mux.Handle("GET /", s.handle(func(http.ResponseWriter, *http.Request) error { return errNotFound() }))

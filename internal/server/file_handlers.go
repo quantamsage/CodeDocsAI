@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/quantamsage/ai-code-documentation-tool/internal/analysis"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/docs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/files"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/jobs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/projects"
@@ -444,6 +445,8 @@ type fileView struct {
 	ViewLimit int64
 	Tree      treeView
 	Analysis  *analysis.FileAnalysis
+	DocURL    string // the file's generated documentation, if any
+	AIEnabled bool
 }
 
 // showFile renders one stored file with line numbers. Content is treated as
@@ -489,6 +492,12 @@ func (s *Server) showFile(w http.ResponseWriter, r *http.Request) error {
 	if stored, err := s.analysis.File(r.Context(), p.UserID, p.ID, f.ID); err == nil {
 		v.Analysis = stored.Analysis
 	} else if !errors.Is(err, analysis.ErrNotFound) {
+		return err
+	}
+	v.AIEnabled = s.ai != nil
+	if _, err := s.docs.Get(r.Context(), p.UserID, p.ID, docs.ScopeFile, f.Path, 0); err == nil {
+		v.DocURL = docURL(p.ID, docs.ScopeFile, f.Path, 0)
+	} else if !errors.Is(err, docs.ErrNotFound) {
 		return err
 	}
 	v.Crumbs = append(v.Crumbs,

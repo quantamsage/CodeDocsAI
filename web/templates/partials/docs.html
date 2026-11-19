@@ -1,0 +1,11 @@
+{{/* doc-regenerate renders a small "Regenerate" form for one document.
+     Call with (dict "ProjectID" id "Scope" s "Key" k "CSRF" token "Enabled" bool). */}}
+{{define "doc-regenerate"}}{{if .Enabled}}
+<form method="post" action="/projects/{{.ProjectID}}/docs/generate" class="inline-form">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <input type="hidden" name="scope" value="{{.Scope}}">
+  <input type="hidden" name="key" value="{{.Key}}">
+  <input type="hidden" name="return" value="/projects/{{.ProjectID}}/docs">
+  <button type="submit" class="link-button">Regenerate</button>
+</form>
+{{end}}{{end}}

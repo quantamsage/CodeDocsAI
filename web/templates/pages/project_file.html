@@ -23,6 +23,20 @@
       </ul>
     </header>
 
+    {{if or .DocURL (and .Analysis .AIEnabled)}}
+    <div class="header-actions file-doc-actions">
+      {{if .DocURL}}<a class="button button-secondary" href="{{.DocURL}}">View file documentation</a>{{end}}
+      {{if and .Analysis .AIEnabled (not .Analysis.Missing)}}
+      <form method="post" action="/projects/{{.Project.ID}}/docs/generate" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <input type="hidden" name="scope" value="file">
+        <input type="hidden" name="key" value="{{.File.Path}}">
+        <button type="submit" class="button">{{if .DocURL}}Regenerate file documentation{{else}}Generate file documentation{{end}}</button>
+      </form>
+      {{end}}
+    </div>
+    {{end}}
+
     {{with .Analysis}}
     <details class="card file-analysis" open>
       <summary><h2>AI analysis</h2></summary>

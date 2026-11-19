@@ -1,0 +1,33 @@
+{{define "content"}}
+{{with .Data}}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a> <span aria-hidden="true">/</span> <a href="/projects/{{.Project.ID}}">{{.Project.Name}}</a> <span aria-hidden="true">/</span> <a href="/projects/{{.Project.ID}}/docs">Documentation</a> <span aria-hidden="true">/</span> {{.Doc.Title}}</nav>
+
+<div class="doc-layout">
+  <aside class="card doc-nav" aria-label="Documents">
+    <h2 class="sidebar-heading"><a href="/projects/{{.Project.ID}}/docs">Documentation</a></h2>
+    <ul>
+      {{range .Nav}}<li{{if and (eq .Scope $.Data.Doc.Scope) (eq .Key $.Data.Doc.Key)}} class="is-current"{{end}}><a href="{{.URL}}"{{if and (eq .Scope $.Data.Doc.Scope) (eq .Key $.Data.Doc.Key)}} aria-current="page"{{end}}>{{.Title}}</a></li>{{end}}
+    </ul>
+  </aside>
+
+  <article class="doc-article">
+    <header class="doc-header">
+      <p class="muted small">
+        Version {{.Doc.Version}}{{if not .Current}} (an older version){{end}} · generated <time datetime="{{isodate .Doc.CreatedAt}}">{{date .Doc.CreatedAt}}</time>{{if .Doc.Model}} by {{.Doc.Model}}{{end}}
+      </p>
+      {{if gt (len .Versions) 1}}
+      <details class="versions">
+        <summary>Versions ({{len .Versions}})</summary>
+        <ul>{{range .Versions}}<li><a href="{{.URL}}"{{if eq .Version $.Data.Doc.Version}} aria-current="true"{{end}}>Version {{.Version}}</a> <span class="muted small">{{date .CreatedAt}}</span></li>{{end}}</ul>
+      </details>
+      {{end}}
+    </header>
+    {{if .Content}}
+    <div class="markdown-body">{{.Content}}</div>
+    {{else}}
+    <pre class="markdown-source">{{.Doc.Markdown}}</pre>
+    {{end}}
+  </article>
+</div>
+{{end}}
+{{end}}

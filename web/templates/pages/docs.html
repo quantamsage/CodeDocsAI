@@ -1,0 +1,83 @@
+{{define "content"}}
+{{$csrf := .CSRFToken}}
+{{with .Data}}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a> <span aria-hidden="true">/</span> <a href="/projects/{{.Project.ID}}">{{.Project.Name}}</a> <span aria-hidden="true">/</span> Documentation</nav>
+<div class="page-header">
+  <div>
+    <h1>Documentation</h1>
+    {{if not .Project.DocumentationUpdatedAt.IsZero}}<p class="muted small">Last updated <time datetime="{{isodate .Project.DocumentationUpdatedAt}}">{{date .Project.DocumentationUpdatedAt}}</time></p>{{end}}
+  </div>
+  {{if .CanGenerate}}
+  <form method="post" action="/projects/{{.Project.ID}}/docs/generate">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <input type="hidden" name="scope" value="all">
+    <input type="hidden" name="return" value="/projects/{{.Project.ID}}/docs">
+    <button type="submit" class="button">{{if .Sections}}Regenerate all{{else}}Generate documentation{{end}}</button>
+  </form>
+  {{end}}
+</div>
+
+{{with .Job}}{{if .Active}}
+<p class="flash" role="status">{{.Label}} job {{.Status}}: {{.Message}} ({{.Percent}}%). Reload the page to see new documents.</p>
+{{else if and .Error (eq .Type "generate_docs")}}
+<p class="form-alert" role="alert">The last documentation job failed: {{.Error}}</p>
+{{end}}{{end}}
+
+{{if not .HasAnalysis}}
+<section class="empty-state card"><h2>No analysis yet</h2><p>Documentation is generated from the project's analysis. Analyze the project first.</p><p><a class="button" href="/projects/{{.Project.ID}}#analysis">Go to analysis</a></p></section>
+{{else if not (or .Sections .Modules .Files)}}
+<section class="empty-state card"><h2>No documentation yet</h2><p>Generate the documentation to create the project sections and one document per module.</p></section>
+{{end}}
+
+{{$p := .Project}}
+{{if or .Sections .Missing}}
+<section class="card docs-list" aria-labelledby="sections-heading">
+  <h2 id="sections-heading">Project documentation</h2>
+  <ul class="doc-entries">
+    {{range .Sections}}
+    <li>
+      <a href="{{.URL}}">{{.Title}}</a>
+      <span class="muted small">version {{.Version}} · <time datetime="{{isodate .CreatedAt}}">{{date .CreatedAt}}</time></span>
+      {{template "doc-regenerate" (dict "ProjectID" $p.ID "Scope" "project" "Key" .Key "CSRF" $csrf "Enabled" $.Data.CanGenerate)}}
+    </li>
+    {{end}}
+    {{range .Missing}}
+    <li><span>{{.Title}}</span> <span class="muted small">not generated yet</span>
+      {{template "doc-regenerate" (dict "ProjectID" $p.ID "Scope" "project" "Key" .Key "CSRF" $csrf "Enabled" $.Data.CanGenerate)}}</li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+{{if .Modules}}
+<section class="card docs-list" aria-labelledby="modules-heading">
+  <h2 id="modules-heading">Modules</h2>
+  <ul class="doc-entries">
+    {{range .Modules}}
+    <li>
+      <a href="{{.URL}}"><code>{{.Key}}</code></a>
+      <span class="muted small">version {{.Version}} · <time datetime="{{isodate .CreatedAt}}">{{date .CreatedAt}}</time></span>
+      {{template "doc-regenerate" (dict "ProjectID" $p.ID "Scope" "module" "Key" .Key "CSRF" $csrf "Enabled" $.Data.CanGenerate)}}
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+{{if .Files}}
+<section class="card docs-list" aria-labelledby="files-heading">
+  <h2 id="files-heading">Files</h2>
+  <ul class="doc-entries">
+    {{range .Files}}
+    <li>
+      <a href="{{.URL}}"><code>{{.Key}}</code></a>
+      <span class="muted small">version {{.Version}} · <time datetime="{{isodate .CreatedAt}}">{{date .CreatedAt}}</time></span>
+      {{template "doc-regenerate" (dict "ProjectID" $p.ID "Scope" "file" "Key" .Key "CSRF" $csrf "Enabled" $.Data.CanGenerate)}}
+    </li>
+    {{end}}
+  </ul>
+  <p class="small muted">Generate documentation for another file from the file's page.</p>
+</section>
+{{end}}
+{{end}}
+{{end}}

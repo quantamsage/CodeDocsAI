@@ -29,13 +29,17 @@
 {{if .FileCount}}
 <section id="analysis" class="card analysis-card" aria-labelledby="analysis-heading">
   <div class="section-header">
-    <h2 id="analysis-heading">AI analysis</h2>
-    {{if .HasAnalysis}}<a class="button button-secondary" href="/projects/{{.ID}}/analysis">View analysis</a>{{end}}
+    <h2 id="analysis-heading">AI analysis and documentation</h2>
+    <div class="header-actions">
+      {{if .HasAnalysis}}<a class="button button-secondary" href="/projects/{{.ID}}/analysis">View analysis</a>{{end}}
+      {{if not .DocumentationUpdatedAt.IsZero}}<a class="button button-secondary" href="/projects/{{.ID}}/docs">View documentation</a>{{end}}
+    </div>
   </div>
 
   {{with .Job}}
   <div class="job-status" data-job-status data-url="/projects/{{$.Data.ID}}/jobs/latest" data-active="{{.Active}}">
     <p class="job-line">
+      <strong>{{.Label}}</strong>
       <span class="status status-job-{{.Status}}" data-job-field="status">{{.Status}}</span>
       <span data-job-field="message">{{.Message}}</span>
     </p>
@@ -61,10 +65,19 @@
   {{if not .AIEnabled}}
   <p class="muted">AI analysis is not configured on this server (set <code>ANTHROPIC_API_KEY</code>).</p>
   {{else if not (and .Job .Job.Active)}}
+  <div class="header-actions">
   <form method="post" action="/projects/{{.ID}}/analyze" class="inline-form">
     <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-    <button type="submit" class="button">{{if .HasAnalysis}}Re-analyze project{{else}}Analyze project{{end}}</button>
+    <button type="submit" class="button{{if .HasAnalysis}} button-secondary{{end}}">{{if .HasAnalysis}}Re-analyze project{{else}}Analyze project{{end}}</button>
   </form>
+  {{if .HasAnalysis}}
+  <form method="post" action="/projects/{{.ID}}/docs/generate" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+    <input type="hidden" name="scope" value="all">
+    <button type="submit" class="button">{{if .DocumentationUpdatedAt.IsZero}}Generate documentation{{else}}Regenerate documentation{{end}}</button>
+  </form>
+  {{end}}
+  </div>
   <p class="small muted">Analysis runs in the background: large projects are processed in batches, and you can leave this page while it runs.</p>
   {{end}}
 </section>
