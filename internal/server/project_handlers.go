@@ -94,6 +94,10 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// Stop background work first so it cannot write to a deleted project.
+	if err := s.jobs.CancelActive(r.Context(), p.UserID, p.ID); err != nil {
+		return err
+	}
 	if err := s.projects.Delete(r.Context(), p.UserID, p.ID); err != nil {
 		if errors.Is(err, projects.ErrNotFound) {
 			return errNotFound()

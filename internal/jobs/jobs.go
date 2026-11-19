@@ -481,3 +481,29 @@ func (p *progress) Update(current, total int, message string) error {
 		 WHERE id = ? AND status = 'running'`, current, total, message, p.q.now(), p.id)
 	return err
 }
+
+// CancelActive cancels every queued or running job of a project owned by
+// userID (used before deleting a project).
+func (q *Queue) CancelActive(ctx context.Context, userID, projectID int64) error {
+	rows, err := q.db.QueryContext(ctx,
+		`SELECT id FROM jobs WHERE project_id = ? AND user_id = ? AND status IN ('queued', 'running')`, projectID, userID)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		if err := q.Cancel(ctx, userID, id); err != nil && !errors.Is(err, ErrNotCancelable) {
+			return err
+		}
+	}
+	return nil
+}

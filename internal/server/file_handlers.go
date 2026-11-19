@@ -17,7 +17,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/quantamsage/ai-code-documentation-tool/internal/analysis"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/files"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/jobs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/projects"
 )
 
@@ -103,6 +105,11 @@ func (s *Server) uploadFiles(w http.ResponseWriter, r *http.Request) error {
 	p, err := s.projectFromPath(r)
 	if err != nil {
 		return err
+	}
+	if active, err := s.jobs.HasActive(r.Context(), p.ID); err != nil {
+		return err
+	} else if active {
+		return &HTTPError{Status: http.StatusConflict, Message: "The project is being analyzed or documented. Wait for the job to finish (or cancel it) before uploading."}
 	}
 	mr, _ := r.Context().Value(ctxKeyMultipart).(*multipart.Reader)
 	if mr == nil {
@@ -386,6 +393,12 @@ type projectView struct {
 	projects.Project
 	Tree  treeView
 	Kinds files.KindCounts
+	// Analysis section.
+	AIEnabled   bool
+	Job         *jobJSON
+	HasAnalysis bool
+	Purpose     string
+	AnalyzedAt  time.Time
 }
 
 func (s *Server) showProject(w http.ResponseWriter, r *http.Request) error {
@@ -398,9 +411,21 @@ func (s *Server) showProject(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	v := projectView{
-		Project: p,
-		Tree:    buildTreeView(p.ID, files.BuildTree(list), "", len(list) <= openTreeMaxFiles),
-		Kinds:   files.CountKinds(list),
+		Project:   p,
+		Tree:      buildTreeView(p.ID, files.BuildTree(list), "", len(list) <= openTreeMaxFiles),
+		Kinds:     files.CountKinds(list),
+		AIEnabled: s.ai != nil,
+	}
+	if job, err := s.jobs.Latest(r.Context(), p.UserID, p.ID); err == nil {
+		j := toJobJSON(job)
+		v.Job = &j
+	} else if !errors.Is(err, jobs.ErrNotFound) {
+		return err
+	}
+	if pa, meta, err := s.analysis.Project(r.Context(), p.UserID, p.ID); err == nil {
+		v.HasAnalysis, v.Purpose, v.AnalyzedAt = true, pa.Purpose, meta.CreatedAt
+	} else if !errors.Is(err, analysis.ErrNotFound) {
+		return err
 	}
 	return s.views.Render(w, http.StatusOK, "project", s.page(r, p.Name, v))
 }
@@ -418,6 +443,7 @@ type fileView struct {
 	Truncated bool
 	ViewLimit int64
 	Tree      treeView
+	Analysis  *analysis.FileAnalysis
 }
 
 // showFile renders one stored file with line numbers. Content is treated as
@@ -459,6 +485,11 @@ func (s *Server) showFile(w http.ResponseWriter, r *http.Request) error {
 		Truncated: truncated,
 		ViewLimit: maxViewBytes,
 		Tree:      buildTreeView(p.ID, files.BuildTree(list), f.Path, false),
+	}
+	if stored, err := s.analysis.File(r.Context(), p.UserID, p.ID, f.ID); err == nil {
+		v.Analysis = stored.Analysis
+	} else if !errors.Is(err, analysis.ErrNotFound) {
+		return err
 	}
 	v.Crumbs = append(v.Crumbs,
 		crumb{Name: "Dashboard", URL: "/dashboard"},

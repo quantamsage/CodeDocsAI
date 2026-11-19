@@ -403,3 +403,35 @@ details[open] > summary > .tree-icon { transform: rotate(90deg); }
   .explorer-layout { grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr); align-items: start; }
   .explorer-sidebar { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); }
 }
+
+/* --- Phase 4: analysis --- */
+.analysis-card { margin-bottom: 1.5rem; }
+.job-status { margin: 0.75rem 0; }
+.job-line { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0 0 0.5rem; }
+.job-status progress { width: 100%; height: 0.75rem; accent-color: var(--accent); }
+.status-job-queued, .status-job-running { background: var(--info-bg); color: var(--accent); }
+.status-job-succeeded { background: var(--success-bg); color: var(--success); }
+.status-job-failed { background: var(--danger-bg); color: var(--danger); }
+.inline-form { display: inline-block; margin: 0.5rem 0; }
+.analysis-purpose { font-size: 1.05rem; max-width: 50rem; }
+.analysis-section { margin-bottom: 1.25rem; }
+.analysis-section h2 { margin-top: 0; font-size: 1.25rem; }
+.analysis-section h3 { font-size: 1rem; margin: 1.25rem 0 0.4rem; }
+.analysis-section p, .analysis-section li { max-width: 60rem; }
+.prose { white-space: pre-line; }
+.def-list { margin: 0; display: grid; gap: 0.6rem; }
+.def-list dt { font-weight: 600; overflow-wrap: anywhere; }
+.def-list dd { margin: 0.15rem 0 0; color: var(--text); }
+.table-scroll { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.data-table th, .data-table td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.data-table th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.compact-list { columns: 2 20rem; padding-left: 1.25rem; font-size: 0.9rem; }
+.assumptions { border-left: 3px solid var(--warning); }
+.file-summaries { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+.file-summaries p { margin: 0.2rem 0 0; color: var(--muted); }
+.file-analysis { margin-bottom: 1rem; }
+.file-analysis > summary { cursor: pointer; list-style: none; }
+.file-analysis > summary::-webkit-details-marker { display: none; }
+.file-analysis > summary h2 { display: inline; font-size: 1.1rem; }
+.badge { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0 0.4rem; border-radius: 999px; background: var(--warning-bg); color: var(--warning); vertical-align: middle; }

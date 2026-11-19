@@ -351,3 +351,27 @@ func TestPercent(t *testing.T) {
 		}
 	}
 }
+
+func TestCancelActive(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.register("analyze", func(context.Context, Job, Progress) error { return nil })
+	e.register("docs", func(context.Context, Job, Progress) error { return nil })
+	a, _ := e.q.Enqueue(ctx, e.user, e.project, "analyze", nil, 1)
+	d, _ := e.q.Enqueue(ctx, e.user, e.project, "docs", nil, 1)
+	if err := e.q.CancelActive(ctx, e.other, e.project); err != nil {
+		t.Fatal(err)
+	}
+	if e.job(t, a.ID).Status != StatusQueued {
+		t.Error("another user canceled the jobs")
+	}
+	if err := e.q.CancelActive(ctx, e.user, e.project); err != nil {
+		t.Fatal(err)
+	}
+	if e.job(t, a.ID).Status != StatusCanceled || e.job(t, d.ID).Status != StatusCanceled {
+		t.Error("jobs not canceled")
+	}
+	if active, _ := e.q.HasActive(ctx, e.project); active {
+		t.Error("project still has active jobs")
+	}
+}

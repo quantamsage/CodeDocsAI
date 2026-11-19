@@ -1,0 +1,128 @@
+{{define "content"}}
+{{with .Data}}
+<nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/dashboard">Dashboard</a> <span aria-hidden="true">/</span> <a href="/projects/{{.Project.ID}}">{{.Project.Name}}</a> <span aria-hidden="true">/</span> Analysis</nav>
+<div class="page-header">
+  <div>
+    <h1>Analysis of “{{.Project.Name}}”</h1>
+    <p class="muted small">Generated <time datetime="{{isodate .Meta.CreatedAt}}">{{date .Meta.CreatedAt}}</time>
+      {{- if .Meta.Model}} by {{.Meta.Model}}{{end}} · {{.Analysis.AnalyzedFiles}} of {{.Analysis.FileCount}} files analyzed
+      {{- if .Meta.InputTokens}} · {{.Meta.InputTokens}} input / {{.Meta.OutputTokens}} output tokens{{end}}</p>
+  </div>
+</div>
+
+{{with .Analysis}}
+<section class="card analysis-section">
+  <h2>Overview</h2>
+  {{if .Purpose}}<p>{{.Purpose}}</p>{{else}}<p class="muted">No overview was produced.</p>{{end}}
+  {{if .MainFunctionality}}<h3>Main functionality</h3><ul>{{range .MainFunctionality}}<li>{{.}}</li>{{end}}</ul>{{end}}
+  {{if .Technologies}}<h3>Technologies</h3><p>{{range $i, $t := .Technologies}}<span class="tag">{{$t}}</span>{{end}}</p>{{end}}
+  {{if .Languages}}<h3>Languages</h3><p>{{range .Languages}}<span class="tag">{{.Language}} <span class="muted">({{.Files}})</span></span>{{end}}</p>{{end}}
+</section>
+
+{{if or .Architecture .Components .Modules}}
+<section class="card analysis-section">
+  <h2>Architecture</h2>
+  {{if .Architecture}}<p class="prose">{{.Architecture}}</p>{{end}}
+  {{if .Components}}
+  <h3>Components</h3>
+  <dl class="def-list">
+    {{range .Components}}<div><dt>{{.Name}}{{range .Paths}} <code>{{.}}</code>{{end}}</dt><dd>{{.Responsibility}}</dd></div>{{end}}
+  </dl>
+  {{end}}
+  {{if .Modules}}
+  <h3>Modules</h3>
+  <dl class="def-list">{{range .Modules}}<div><dt><code>{{.Path}}</code></dt><dd>{{.Responsibility}}</dd></div>{{end}}</dl>
+  {{end}}
+  {{if .EntryPoints}}<h3>Entry points</h3><ul>{{range .EntryPoints}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
+</section>
+{{end}}
+
+{{if .Workflows}}
+<section class="card analysis-section">
+  <h2>Workflows</h2>
+  {{range .Workflows}}<h3>{{.Name}}</h3><ol>{{range .Steps}}<li>{{.}}</li>{{end}}</ol>{{end}}
+</section>
+{{end}}
+
+{{if .Endpoints}}
+<section class="card analysis-section">
+  <h2>API endpoints</h2>
+  <div class="table-scroll">
+  <table class="data-table">
+    <thead><tr><th scope="col">Method</th><th scope="col">Path</th><th scope="col">Handler</th><th scope="col">Description</th><th scope="col">Auth</th><th scope="col">File</th></tr></thead>
+    <tbody>{{range .Endpoints}}<tr><td><code>{{or .Method "—"}}</code></td><td><code>{{.Path}}</code></td><td><code>{{.Handler}}</code></td><td>{{.Description}}</td><td>{{.Auth}}</td><td><code>{{.File}}</code></td></tr>{{end}}</tbody>
+  </table>
+  </div>
+</section>
+{{end}}
+
+{{if .DataModels}}
+<section class="card analysis-section">
+  <h2>Data models</h2>
+  <dl class="def-list">{{range .DataModels}}<div><dt><code>{{.Name}}</code> <span class="muted small">{{.File}}</span></dt><dd>{{.Description}}{{if .Fields}}<br><span class="small muted">Fields: {{range $i, $f := .Fields}}{{if $i}}, {{end}}{{$f}}{{end}}</span>{{end}}</dd></div>{{end}}</dl>
+</section>
+{{end}}
+
+{{if .Dependencies}}
+<section class="card analysis-section">
+  <h2>Dependencies</h2>
+  <div class="table-scroll">
+  <table class="data-table">
+    <thead><tr><th scope="col">Name</th><th scope="col">Declared</th><th scope="col">Purpose</th><th scope="col">Used in</th></tr></thead>
+    <tbody>{{range .Dependencies}}<tr><td><code>{{.Name}}</code></td><td>{{if .Declared}}Yes{{else}}<span class="muted">Used only</span>{{end}}</td><td>{{or .Purpose "—"}}</td><td>{{range $i, $u := .UsedIn}}{{if $i}}, {{end}}<code>{{$u}}</code>{{end}}</td></tr>{{end}}</tbody>
+  </table>
+  </div>
+</section>
+{{end}}
+
+{{if .Configuration}}
+<section class="card analysis-section">
+  <h2>Configuration</h2>
+  <dl class="def-list">{{range .Configuration}}<div><dt><code>{{.Name}}</code> <span class="muted small">{{.File}}</span></dt><dd>{{or .Description "—"}}</dd></div>{{end}}</dl>
+</section>
+{{end}}
+
+{{if or .Interactions .ImportGraph}}
+<section class="card analysis-section">
+  <h2>Relationships</h2>
+  {{if .Interactions}}
+  <h3>Component interactions</h3>
+  <ul>{{range .Interactions}}<li><code>{{.From}}</code> → <code>{{.Target}}</code>{{if .Kind}} <span class="muted">({{.Kind}})</span>{{end}}{{if .Description}}: {{.Description}}{{end}}</li>{{end}}</ul>
+  {{end}}
+  {{if .ImportGraph}}
+  <h3>Internal imports <span class="muted small">(from the parsed code)</span></h3>
+  <ul class="compact-list">{{range .ImportGraph}}<li><code>{{.From}}</code> → <code>{{.Target}}</code></li>{{end}}</ul>
+  {{end}}
+</section>
+{{end}}
+
+{{if or .ErrorHandling .Logging}}
+<section class="card analysis-section">
+  <h2>Error handling and logging</h2>
+  {{if .ErrorHandling}}<h3>Error handling</h3><p>{{.ErrorHandling}}</p>{{end}}
+  {{if .Logging}}<h3>Logging</h3><p>{{.Logging}}</p>{{end}}
+</section>
+{{end}}
+
+{{if .Assumptions}}
+<section class="card analysis-section assumptions">
+  <h2>Assumptions</h2>
+  <p class="small muted">These points were inferred and are not directly confirmed by the code.</p>
+  <ul>{{range .Assumptions}}<li>{{.}}</li>{{end}}</ul>
+</section>
+{{end}}
+{{end}}
+
+<section class="card analysis-section">
+  <h2>Files</h2>
+  <ul class="file-summaries">
+    {{range .Files}}
+    <li>
+      <a href="{{.URL}}"><code>{{.Path}}</code></a>{{if gt .Parts 1}} <span class="muted small">(analyzed in {{.Parts}} parts)</span>{{end}}
+      {{if .Missing}}<p class="muted small">No analysis was returned for this file.</p>{{else if .Summary}}<p>{{.Summary}}</p>{{end}}
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+{{end}}

@@ -23,6 +23,38 @@
       </ul>
     </header>
 
+    {{with .Analysis}}
+    <details class="card file-analysis" open>
+      <summary><h2>AI analysis</h2></summary>
+      {{if .Missing}}
+      <p class="muted">The AI did not return an analysis for this file.</p>
+      {{else}}
+      {{if .Summary}}<p>{{.Summary}}</p>{{end}}
+      {{if .Responsibilities}}<ul>{{range .Responsibilities}}<li>{{.}}</li>{{end}}</ul>{{end}}
+      {{if .Functions}}
+      <h3>Functions and methods</h3>
+      <dl class="def-list">
+        {{range .Functions}}
+        <div>
+          <dt><code>{{or .Signature .Name}}</code>{{if not .Verified}} <span class="badge" title="Not found by the parser; found in the code text">unverified</span>{{end}}</dt>
+          <dd>{{.Description}}
+            {{if .Returns}}<br><span class="small"><strong>Returns:</strong> {{.Returns}}</span>{{end}}
+            {{if .SideEffects}}<br><span class="small"><strong>Side effects:</strong> {{.SideEffects}}</span>{{end}}
+            {{if .Errors}}<br><span class="small"><strong>Errors:</strong> {{.Errors}}</span>{{end}}
+          </dd>
+        </div>
+        {{end}}
+      </dl>
+      {{end}}
+      {{if .Types}}<h3>Types</h3><dl class="def-list">{{range .Types}}<div><dt><code>{{.Name}}</code> <span class="muted small">{{.Kind}}</span></dt><dd>{{.Description}}</dd></div>{{end}}</dl>{{end}}
+      {{if .Endpoints}}<h3>Endpoints</h3><ul>{{range .Endpoints}}<li><code>{{.Method}} {{.Path}}</code> — {{.Description}}</li>{{end}}</ul>{{end}}
+      {{if .Configuration}}<h3>Configuration</h3><ul>{{range .Configuration}}<li><code>{{.Name}}</code> — {{.Description}}</li>{{end}}</ul>{{end}}
+      {{if .Relationships}}<h3>Relationships</h3><ul>{{range .Relationships}}<li>{{.Kind}} <code>{{.Target}}</code>{{if .Description}}: {{.Description}}{{end}}</li>{{end}}</ul>{{end}}
+      {{if .Assumptions}}<h3>Assumptions</h3><ul class="assumptions">{{range .Assumptions}}<li>{{.}}</li>{{end}}</ul>{{end}}
+      {{end}}
+    </details>
+    {{end}}
+
     {{if .Truncated}}
     <p class="form-alert" role="status">This file is larger than {{bytes .ViewLimit}}; only the beginning is shown.</p>
     {{end}}

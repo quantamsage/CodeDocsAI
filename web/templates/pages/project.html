@@ -27,6 +27,50 @@
 </dl>
 
 {{if .FileCount}}
+<section id="analysis" class="card analysis-card" aria-labelledby="analysis-heading">
+  <div class="section-header">
+    <h2 id="analysis-heading">AI analysis</h2>
+    {{if .HasAnalysis}}<a class="button button-secondary" href="/projects/{{.ID}}/analysis">View analysis</a>{{end}}
+  </div>
+
+  {{with .Job}}
+  <div class="job-status" data-job-status data-url="/projects/{{$.Data.ID}}/jobs/latest" data-active="{{.Active}}">
+    <p class="job-line">
+      <span class="status status-job-{{.Status}}" data-job-field="status">{{.Status}}</span>
+      <span data-job-field="message">{{.Message}}</span>
+    </p>
+    {{if .Active}}
+    <progress max="100" value="{{.Percent}}" data-job-field="progress" aria-label="Analysis progress">{{.Percent}}%</progress>
+    <noscript><p class="small muted">Reload the page to see progress.</p></noscript>
+    {{end}}
+    {{if and .Error (not .Active)}}<p class="form-alert" role="alert">{{.Error}}</p>{{end}}
+    {{if .Active}}
+    <form method="post" action="/projects/{{$.Data.ID}}/jobs/{{.ID}}/cancel" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <button type="submit" class="link-button danger-link">Cancel</button>
+    </form>
+    {{end}}
+  </div>
+  {{end}}
+
+  {{if .HasAnalysis}}
+  <p class="analysis-purpose">{{.Purpose}}</p>
+  <p class="small muted">Analyzed <time datetime="{{isodate .AnalyzedAt}}">{{date .AnalyzedAt}}</time>.</p>
+  {{end}}
+
+  {{if not .AIEnabled}}
+  <p class="muted">AI analysis is not configured on this server (set <code>ANTHROPIC_API_KEY</code>).</p>
+  {{else if not (and .Job .Job.Active)}}
+  <form method="post" action="/projects/{{.ID}}/analyze" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+    <button type="submit" class="button">{{if .HasAnalysis}}Re-analyze project{{else}}Analyze project{{end}}</button>
+  </form>
+  <p class="small muted">Analysis runs in the background: large projects are processed in batches, and you can leave this page while it runs.</p>
+  {{end}}
+</section>
+{{end}}
+
+{{if .FileCount}}
 <section id="files" class="card explorer" aria-labelledby="files-heading">
   <div class="section-header">
     <h2 id="files-heading">Files</h2>

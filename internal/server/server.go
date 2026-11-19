@@ -11,9 +11,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/quantamsage/ai-code-documentation-tool/internal/ai"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/analysis"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/auth"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/config"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/files"
+	"github.com/quantamsage/ai-code-documentation-tool/internal/jobs"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/projects"
 	"github.com/quantamsage/ai-code-documentation-tool/internal/view"
 	"github.com/quantamsage/ai-code-documentation-tool/web"
@@ -31,6 +34,11 @@ type Server struct {
 	auth     *auth.Service
 	projects *projects.Store
 	files    *files.Store
+
+	ai       ai.Provider // nil when no AI is configured
+	aiSet    bool
+	jobs     *jobs.Queue
+	analysis *analysis.Store
 }
 
 // Option customizes a Server (mainly for tests).
@@ -41,6 +49,14 @@ type Option func(*Server)
 // leaves them unset.
 func WithAuthOptions(o auth.Options) Option {
 	return func(s *Server) { s.authOpts = o }
+}
+
+// WithAIProvider sets the AI provider (tests use ai.Fake); nil disables AI.
+func WithAIProvider(p ai.Provider) Option {
+	return func(s *Server) {
+		s.ai = p
+		s.aiSet = true
+	}
 }
 
 // sessionPurgeInterval is how often expired sessions are deleted.
@@ -69,6 +85,19 @@ func New(cfg config.Config, db *sql.DB, log *slog.Logger, opts ...Option) (*Serv
 	s.auth = auth.NewService(db, s.authOpts)
 	s.projects = projects.NewStore(db, s.authOpts.Now)
 	s.files = files.NewStore(db, files.NewBlobStore(cfg.DataDir), s.authOpts.Now)
+
+	if !s.aiSet && cfg.AI.APIKey != "" {
+		provider, err := ai.NewClaude(ai.ClaudeConfig{APIKey: cfg.AI.APIKey, Model: cfg.AI.Model, Effort: cfg.AI.Effort, Timeout: cfg.AI.Timeout, MaxRetries: 2})
+		if err != nil {
+			return nil, err
+		}
+		s.ai = provider
+	}
+	s.analysis = analysis.NewStore(db, s.authOpts.Now)
+	s.jobs = jobs.New(db, jobs.Options{Now: s.authOpts.Now, Log: log, Classify: analysis.Classify})
+	s.jobs.Register(analysis.JobType, (&analysis.Analyzer{
+		Files: s.files, Store: s.analysis, Provider: s.ai, BatchTokens: cfg.AI.BatchTokens, Log: log,
+	}).Definition())
 
 	mux := http.NewServeMux()
 	s.routes(mux)
@@ -108,6 +137,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 
 	go s.auth.RunPurge(ctx, sessionPurgeInterval)
+	go s.jobs.Run(ctx, s.cfg.JobWorkers)
 
 	errCh := make(chan error, 1)
 	go func() {

@@ -94,6 +94,43 @@
   function init() {
     initNavToggle();
     initUploadForm();
+    initJobStatus();
+  }
+
+  // Polls a running job's progress and reloads the page when it finishes,
+  // so the results (or the error) appear without a manual refresh.
+  function initJobStatus() {
+    var box = document.querySelector("[data-job-status]");
+    if (!box || box.getAttribute("data-active") !== "true" || typeof fetch !== "function") return;
+    var url = box.getAttribute("data-url");
+    var field = function (name) { return box.querySelector('[data-job-field="' + name + '"]'); };
+    var failures = 0;
+
+    function poll() {
+      fetch(url, { headers: { Accept: "application/json" }, credentials: "same-origin" })
+        .then(function (res) {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          failures = 0;
+          var job = data.job;
+          if (!job) return;
+          if (!job.active) {
+            window.location.reload();
+            return;
+          }
+          if (field("message")) field("message").textContent = job.message;
+          if (field("status")) field("status").textContent = job.status;
+          if (field("progress")) field("progress").value = job.percent;
+          setTimeout(poll, 2000);
+        })
+        .catch(function () {
+          failures += 1;
+          if (failures < 5) setTimeout(poll, 5000);
+        });
+    }
+    setTimeout(poll, 2000);
   }
 
   if (document.readyState === "loading") {

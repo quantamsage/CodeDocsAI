@@ -35,7 +35,7 @@ func newTestEnv(t *testing.T) *testEnv {
 
 // newTestEnvWith builds a server with a fast password hasher and a fake
 // clock; tweak (if non-nil) may adjust the configuration first.
-func newTestEnvWith(t *testing.T, tweak func(*config.Config)) *testEnv {
+func newTestEnvWith(t *testing.T, tweak func(*config.Config), opts ...Option) *testEnv {
 	t.Helper()
 	cfg, err := config.LoadFrom(func(string) string { return "" })
 	if err != nil {
@@ -60,11 +60,11 @@ func newTestEnvWith(t *testing.T, tweak func(*config.Config)) *testEnv {
 	logs := &bytes.Buffer{}
 	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	clock := newClock()
-	srv, err := New(cfg, db, log, WithAuthOptions(auth.Options{
+	srv, err := New(cfg, db, log, append([]Option{WithAuthOptions(auth.Options{
 		Hasher:              auth.NewHasher(auth.Argon2Params{Memory: 64, Time: 1, Threads: 1, SaltLen: 16, KeyLen: 32}, 4),
 		MaxFailuresPerEmail: 3,
 		Now:                 clock.Now,
-	}))
+	})}, opts...)...)
 	if err != nil {
 		t.Fatal(err)
 	}
