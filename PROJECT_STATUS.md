@@ -8,7 +8,7 @@
 | 2 | Authentication and User Dashboard | ✅ Complete (approved) |
 | 3 | Code Upload and Project Processing | ✅ Complete (approved) |
 | 4 | AI Integration and Codebase Analysis | ✅ Complete |
-| 5 | Documentation Generation | Not started |
+| 5 | Documentation Generation | ✅ Complete |
 | 6 | Documentation Viewer and Export | Not started |
 | 7 | Interactive AI Code Assistant | Not started |
 | 8 | Final Integration, Security, and Testing | Not started |
@@ -101,6 +101,24 @@ I also ran a manual smoke test with the built binary over real HTTP (curl): regi
 
 New coverage, all with mocked AI: the Claude provider against a local fake API (request shape: schema format, effort, fallback beta header, no thinking parameter; parsing; refusal, cut-off, empty and malformed output; 401/429 with `Retry-After`/529/500/413/400 and network errors); structure extraction for Go (AST details, partial results on parse errors, symbol limit) and every heuristic language, routes, SQL tables and all manifest formats; the job queue (progress, one active job per type, permanent failures, backoff and attempt limits, provider retry delays, panics, canceling queued and running jobs, restart recovery, owner scoping, the worker loop, `CancelActive`); batching and splitting; validation rejecting invented functions/types/endpoints/models/settings and foreign paths; the import graph; the pipeline end to end (statuses, aggregates, verified functions, skipped files, code only in delimited user prompts, owner scoping), large-file splitting and merging, batch splitting on cut-off output, retry of omitted files, resuming without re-analysis after a rate limit, failures (no AI, no files, rejected request) and module summaries; and the HTTP flow (start, progress JSON, completion, analysis and file pages with escaped AI output, conflicts, upload blocking, cancel, failures shown, cross-user isolation, project deletion).
 
+## Phase 5 — completed
+
+- **Documentation generator** (`internal/docs`, job `generate_docs`): writes documentation from the **stored analysis only**, never from raw code. Each document's prompt contains just the part of the analysis it needs (the project view, the relevant file analyses, aggregated endpoints/models/config/dependencies), placed inside `<analysis>` delimiters with a system prompt that marks it as untrusted data.
+- **Documents:**
+  - project sections: Project Overview, Architecture (components, interactions, workflows), Directory and File Documentation, API Documentation, Database Documentation, Dependencies, Configuration and Setup, Usage Examples. **API and Database sections are generated only when the analysis found endpoints or data models.**
+  - one module document per analyzed directory: file responsibilities, every function and method (responsibility, parameters, return values, side effects, errors), types and relationships. Large modules are trimmed to fit the token budget.
+  - file documents, generated on request from a file's page.
+- **Confirmed vs. assumed:** the prompt requires facts to be written plainly and anything inferred (analysis assumptions, unverified functions) to go in a `> **Assumption:**` blockquote; the analysis passed to the model carries the `verified` flags and assumption lists.
+- **Versions:** each generation inserts a new row in `documentation` with the next version number; the highest version is current and older ones stay readable. A retried job skips documents it already wrote (resumable like analysis).
+- **Regeneration:** everything, one section, one module or one file (`POST /projects/{id}/docs/generate` with `scope` = `all`/`project`/`module`/`file` and `key`). Requests are validated against the plan (unknown sections, non-applicable sections, unknown modules and unanalyzed files are rejected with 400).
+- **Output checks:** schema-constrained JSON with one `markdown` field; empty output is an error; active HTML tags (`script`, `iframe`, `form`, …) are stripped; a title heading is ensured; size is capped.
+- **Project status** moves to `documenting`, then `documented` (with `documentation_updated_at`); failure or cancel restores the previous state.
+- **Web:** "Generate/Regenerate documentation" on the project page, a documentation index (`/projects/{id}/docs`) listing sections, modules and files with per-document regenerate buttons and not-yet-generated sections, a document page (`/projects/{id}/docs/{scope}?key=…&version=…`) with navigation between documents and a version list, and generate/view buttons on each file page. Job status shows whether analysis or documentation is running. Raw Markdown is shown escaped until Phase 6 renders it.
+
+### Tests
+
+New coverage, all with mocked AI: planning (all/section/module/file, API and DB sections only when applicable, rejections), prompts built from analysis without raw code and with the untrusted-data and assumption rules, Markdown validation and sanitizing, versioning and current-version queries, owner scoping, resuming a retried job without regenerating finished documents, failures and status transitions; HTTP tests for generating everything and then one section, module and file, version history and old-version views, 404s for unknown versions/keys, 503 without AI, 409 without analysis or with an active job, 400 for bad scopes/keys, CSRF, safe `return` redirects, escaping of AI-written HTML, and cross-user isolation of every docs route.
+
 ## Architectural decisions
 
 - **Pure-Go SQLite (`modernc.org/sqlite`)** rather than `mattn/go-sqlite3`, so builds need no cgo or C toolchain. As a result, `go test -race` (which needs cgo) is not available on machines without a C compiler.
@@ -126,16 +144,20 @@ New coverage, all with mocked AI: the Claude provider against a local fake API (
 - **Structure first, AI second.** Parsed facts ground the prompts and are used to reject model claims about code that does not exist. Go gets a real parser; other languages get explicit, documented heuristics instead of pretending to parse them.
 - **Results stored per file, per job.** Analysis is resumable after rate limits or restarts and never sends the whole codebase at once; the project view is built from summaries, not code.
 - **SQLite-backed job queue** instead of external infrastructure: atomic claim with `UPDATE … RETURNING`, polling workers in the same binary.
+- **Docs from analysis, one request per document.** Keeps each prompt small and focused, makes per-document regeneration and resumable jobs natural, and means documentation can only describe what the validated analysis contains.
+- **Versions are rows, not overwrites.** The `documentation` table (from migration 0001) keeps every version; "current" is the highest version per scope and key.
 
 ## Outstanding tasks
 
-- Phase 5: documentation generation from the stored analysis, versions, and regeneration of the whole project or one file/module.
+- Phase 6: Markdown rendering, table of contents, syntax highlighting, and Markdown/ZIP export.
 
 ## Known issues / limitations
 
 - Analysis quality and cost depend on the model; a large project makes one request per batch plus synthesis. Token usage is shown on the analysis page.
 - Non-Go languages use declaration patterns, so unusual syntax (multi-line signatures, macros, decorators that wrap definitions) can be missed. Function claims from the AI are still checked against the code text.
 - Files larger than the budget are analyzed in line ranges; a function spanning a range boundary may be described from partial code.
+- Documentation quality is bounded by the analysis: if analysis missed something, docs say it could not be determined. Regenerating docs after re-analysis is manual.
+- Old documentation versions are kept indefinitely; there is no pruning yet.
 - Jobs run in the server process; with several server instances each would run its own workers against the same database (claiming stays atomic, but this setup is untested).
 
 - Login throttling is in memory, so it resets on restart and isn't shared between instances.

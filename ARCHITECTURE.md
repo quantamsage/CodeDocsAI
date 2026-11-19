@@ -17,6 +17,7 @@ internal/ai/           LLM provider interface, Claude implementation (official G
 internal/structure/    language-aware structure extraction (go/ast for Go, patterns for others)
 internal/jobs/         SQLite-backed background job queue (progress, retries, cancel, recovery)
 internal/analysis/     AI analysis pipeline (selection, batching, validation, synthesis, import graph)
+internal/docs/         documentation generator (from stored analysis), versioned document store
 internal/view/         HTML template renderer (layout + partials + per-page sets)
 internal/server/       routing, middleware, centralized error handling, handlers
 web/                   embedded assets: templates/{layouts,partials,pages}, static/{css,js}
@@ -93,9 +94,13 @@ files ─▶ select relevant ─▶ structure.Extract ─▶ plan batches (≤ b
 
 Results live in `analysis_results` (`structure` and `file` per file, `batch` with token usage, `project`), tagged with the job id; earlier runs are deleted when a new run starts, while the current run's rows let a retry skip finished files. Reads (`analysis.Store.Project/Files/File`) join `projects.user_id`.
 
+## Documentation generation
+
+`docs.Generator` (job type `generate_docs`) reads the stored analysis, never the code. `docs.Plan` turns a request (`all`, or one `project` section / `module` directory / `file`) into tasks; the API and Database sections are planned only when the analysis has endpoints or data models. Each task is one AI request whose prompt holds only the analysis data for that document, inside `<analysis>` delimiters. The response (`{"markdown": …}`) is checked, stripped of active HTML tags and stored as a new version in `documentation` (`scope`, `key`, `version`, `job_id`). A retried job skips documents it already stored. `docs.Store` reads are owner-scoped: `Current` (latest version of every document), `Get` (one version) and `Versions`.
+
 ## Templates
 
-`view.New` parses `layouts/*` and `partials/*` once, then clones that set for every file in `pages/`. This lets each page define its own `title` and `content` blocks without clashing with other pages. `Render` executes into a buffer, so a template error never sends a half-written page. Every page receives `view.Page{Title, RequestID, User, CSRFToken, Flash, Data}`; handlers build it with `s.page(r, title, data)`. Forms use the `csrf` partial (or `$csrf` inside `with` blocks). Template helpers: `date`, `isodate` and `bytes`.
+`view.New` parses `layouts/*` and `partials/*` once, then clones that set for every file in `pages/`. This lets each page define its own `title` and `content` blocks without clashing with other pages. `Render` executes into a buffer, so a template error never sends a half-written page. Every page receives `view.Page{Title, RequestID, User, CSRFToken, Flash, Data}`; handlers build it with `s.page(r, title, data)`. Forms use the `csrf` partial (or `$csrf` inside `with` blocks). Template helpers: `date`, `isodate`, `bytes` and `dict` (builds a map, for passing several values to a partial).
 
 ## Database
 

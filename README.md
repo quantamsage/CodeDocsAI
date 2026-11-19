@@ -34,6 +34,10 @@ Set `ANTHROPIC_API_KEY` (from https://platform.claude.com/) before starting the 
 
 Model and limits are configurable with `APP_AI_MODEL` (default `claude-opus-5-5`), `APP_AI_EFFORT`, `APP_AI_TIMEOUT`, `APP_AI_BATCH_TOKENS` and `APP_JOB_WORKERS` (see `.env.example`). Without a key, everything except AI features keeps working. Automated tests never call the AI; they use a fake provider.
 
+## Documentation
+
+After analysis, choose **Generate documentation** on the project page. A background job writes the project sections (overview, architecture, directory and file guide, API and database references when the project has them, dependencies, configuration and setup, usage examples) and one document per module, from the stored analysis. Open **View documentation** to browse them. Each document can be regenerated on its own, and every regeneration keeps the previous versions. From a file's page you can also generate documentation for that single file.
+
 ## Tests
 
 ```sh
