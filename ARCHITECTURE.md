@@ -17,7 +17,8 @@ internal/ai/           LLM provider interface, Claude implementation (official G
 internal/structure/    language-aware structure extraction (go/ast for Go, patterns for others)
 internal/jobs/         SQLite-backed background job queue (progress, retries, cancel, recovery)
 internal/analysis/     AI analysis pipeline (selection, batching, validation, synthesis, import graph)
-internal/docs/         documentation generator (from stored analysis), versioned document store
+internal/docs/         documentation generator (from stored analysis), versioned document store, ZIP export
+internal/markdown/     safe Markdown → HTML (goldmark, no raw HTML), chroma highlighting, table of contents
 internal/view/         HTML template renderer (layout + partials + per-page sets)
 internal/server/       routing, middleware, centralized error handling, handlers
 web/                   embedded assets: templates/{layouts,partials,pages}, static/{css,js}
@@ -97,6 +98,10 @@ Results live in `analysis_results` (`structure` and `file` per file, `batch` wit
 ## Documentation generation
 
 `docs.Generator` (job type `generate_docs`) reads the stored analysis, never the code. `docs.Plan` turns a request (`all`, or one `project` section / `module` directory / `file`) into tasks; the API and Database sections are planned only when the analysis has endpoints or data models. Each task is one AI request whose prompt holds only the analysis data for that document, inside `<analysis>` delimiters. The response (`{"markdown": …}`) is checked, stripped of active HTML tags and stored as a new version in `documentation` (`scope`, `key`, `version`, `job_id`). A retried job skips documents it already stored. `docs.Store` reads are owner-scoped: `Current` (latest version of every document), `Get` (one version) and `Versions`.
+
+## Documentation viewer and export
+
+`markdown.Render` parses the stored Markdown with goldmark (GFM) and renders it without raw HTML; dangerous link and image URLs are blanked, external links get `rel="nofollow noopener noreferrer"`, and a custom code-block renderer tokenizes with chroma and writes `hl-*` classes (styled by `web/static/css/highlight.css`). Heading IDs are generated with a `doc-` prefix and level-2/3 headings are returned as the TOC. `showDoc` passes the rendered HTML, TOC, version list and prev/next documents to `pages/doc.html`. `downloadDoc` returns one version as `text/markdown`; `exportDocs` calls `docs.WriteZip`, which lays the current documents out as `README.md`, `sections/`, `modules/` and `files/` (paths from `docs.ExportPath`, sanitized per segment).
 
 ## Templates
 

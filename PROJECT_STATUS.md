@@ -9,7 +9,7 @@
 | 3 | Code Upload and Project Processing | ✅ Complete (approved) |
 | 4 | AI Integration and Codebase Analysis | ✅ Complete |
 | 5 | Documentation Generation | ✅ Complete |
-| 6 | Documentation Viewer and Export | Not started |
+| 6 | Documentation Viewer and Export | ✅ Complete |
 | 7 | Interactive AI Code Assistant | Not started |
 | 8 | Final Integration, Security, and Testing | Not started |
 
@@ -113,11 +113,27 @@ New coverage, all with mocked AI: the Claude provider against a local fake API (
 - **Regeneration:** everything, one section, one module or one file (`POST /projects/{id}/docs/generate` with `scope` = `all`/`project`/`module`/`file` and `key`). Requests are validated against the plan (unknown sections, non-applicable sections, unknown modules and unanalyzed files are rejected with 400).
 - **Output checks:** schema-constrained JSON with one `markdown` field; empty output is an error; active HTML tags (`script`, `iframe`, `form`, …) are stripped; a title heading is ensured; size is capped.
 - **Project status** moves to `documenting`, then `documented` (with `documentation_updated_at`); failure or cancel restores the previous state.
-- **Web:** "Generate/Regenerate documentation" on the project page, a documentation index (`/projects/{id}/docs`) listing sections, modules and files with per-document regenerate buttons and not-yet-generated sections, a document page (`/projects/{id}/docs/{scope}?key=…&version=…`) with navigation between documents and a version list, and generate/view buttons on each file page. Job status shows whether analysis or documentation is running. Raw Markdown is shown escaped until Phase 6 renders it.
+- **Web:** "Generate/Regenerate documentation" on the project page, a documentation index (`/projects/{id}/docs`) listing sections, modules and files with per-document regenerate buttons and not-yet-generated sections, a document page (`/projects/{id}/docs/{scope}?key=…&version=…`) with navigation between documents and a version list, and generate/view buttons on each file page. Job status shows whether analysis or documentation is running.
 
 ### Tests
 
 New coverage, all with mocked AI: planning (all/section/module/file, API and DB sections only when applicable, rejections), prompts built from analysis without raw code and with the untrusted-data and assumption rules, Markdown validation and sanitizing, versioning and current-version queries, owner scoping, resuming a retried job without regenerating finished documents, failures and status transitions; HTTP tests for generating everything and then one section, module and file, version history and old-version views, 404s for unknown versions/keys, 503 without AI, 409 without analysis or with an active job, 400 for bad scopes/keys, CSRF, safe `return` redirects, escaping of AI-written HTML, and cross-user isolation of every docs route.
+
+## Phase 6 — completed
+
+- **Safe Markdown rendering** (`internal/markdown`, goldmark with GFM): headings, lists, task lists, tables, links, autolinks, strikethrough, block quotes and code. AI-written Markdown is treated as untrusted: raw HTML is dropped (never passed through), `javascript:`/`vbscript:`/`file:`/non-image `data:` URLs are blanked, and external links get `rel="nofollow noopener noreferrer"`.
+- **Syntax highlighting** on the server with chroma, using CSS classes only (`web/static/css/highlight.css`, light and dark themes), so it works without JavaScript and within the `'self'`-only CSP. Unknown languages fall back to escaped plain text.
+- **Table of contents:** headings get unique, prefixed IDs (`doc-…`, so they can't clash with page IDs); level-2 and level-3 headings form an "On this page" list.
+- **Navigation:** the sidebar lists every current document in reading order (sections, modules, files) and marks the current one; previous/next links at the end of each document; the version list stays available.
+- **Export:**
+  - `GET /projects/{id}/docs/{scope}/download?key=…[&version=N]` downloads one document version as `text/markdown` (`<project>-<title>.md`), byte-for-byte the stored Markdown.
+  - `GET /projects/{id}/docs/export.zip` downloads the current version of every document as `<project>-docs/` with `README.md` (an index linking every document), `sections/NN-<section>.md` in reading order, `modules/<directory>.md` (`root.md` for the top level) and `files/<file path>.md`. Every path segment is sanitized, so archive entries can't escape the folder.
+  - Downloads use `Content-Disposition: attachment` (file names encoded by `mime.FormatMediaType`), `nosniff` and `no-store`, and are owner-scoped like every other route.
+- **UI:** download buttons on the document page, the docs index (per document and "Download all (ZIP)") and the project page; a copy button on code blocks (progressive enhancement); print styles that hide navigation.
+
+### Tests
+
+New coverage: rendering of every Markdown feature listed above, heading IDs (prefix, uniqueness, Unicode, empty), the TOC, highlighting with classes and no inline styles, plain fallback for unknown languages, and XSS cases (script/iframe/img/inline event handlers, `javascript:`/`vbscript:`/`file:`/`data:` links and images, HTML inside headings and code, malicious code-fence info strings); slugs, download names, export paths (traversal, backslashes, hidden files, collisions) and ZIP layout and README; HTTP tests for the rendered viewer (TOC, prev/next, download links), Markdown download headers and body, version downloads, 404s, ZIP contents (no database section when not applicable), no export without documents, and cross-user/anonymous access to downloads and exports. I also ran the built binary to check that the new stylesheet is served and the export route requires sign-in.
 
 ## Architectural decisions
 
@@ -145,11 +161,13 @@ New coverage, all with mocked AI: planning (all/section/module/file, API and DB 
 - **Results stored per file, per job.** Analysis is resumable after rate limits or restarts and never sends the whole codebase at once; the project view is built from summaries, not code.
 - **SQLite-backed job queue** instead of external infrastructure: atomic claim with `UPDATE … RETURNING`, polling workers in the same binary.
 - **Docs from analysis, one request per document.** Keeps each prompt small and focused, makes per-document regeneration and resumable jobs natural, and means documentation can only describe what the validated analysis contains.
+- **Server-side rendering and highlighting.** Markdown is rendered per request by goldmark with raw HTML disabled, rather than trusting a client-side library or a sanitizer pass; chroma emits classes so the strict CSP needs no exceptions. These are the only new dependencies (`yuin/goldmark`, `alecthomas/chroma/v2`).
+- **Exports mirror the viewer's order** and are built from the current versions; the stored Markdown is exported unchanged so it keeps its formatting.
 - **Versions are rows, not overwrites.** The `documentation` table (from migration 0001) keeps every version; "current" is the highest version per scope and key.
 
 ## Outstanding tasks
 
-- Phase 6: Markdown rendering, table of contents, syntax highlighting, and Markdown/ZIP export.
+- Phase 7: interactive AI code assistant (chat with retrieved context, history per project and user).
 
 ## Known issues / limitations
 
@@ -158,6 +176,9 @@ New coverage, all with mocked AI: planning (all/section/module/file, API and DB 
 - Files larger than the budget are analyzed in line ranges; a function spanning a range boundary may be described from partial code.
 - Documentation quality is bounded by the analysis: if analysis missed something, docs say it could not be determined. Regenerating docs after re-analysis is manual.
 - Old documentation versions are kept indefinitely; there is no pruning yet.
+- The ZIP export contains current versions only; older versions can be downloaded individually.
+- Links between documents inside exported Markdown are only those in the README index; the documents themselves reference files by path, not by link.
+- Markdown is rendered on every page view (fast for capped document sizes, but not cached).
 - Jobs run in the server process; with several server instances each would run its own workers against the same database (claiming stays atomic, but this setup is untested).
 
 - Login throttling is in memory, so it resets on restart and isn't shared between instances.

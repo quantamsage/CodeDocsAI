@@ -38,6 +38,8 @@ Model and limits are configurable with `APP_AI_MODEL` (default `claude-opus-5-5`
 
 After analysis, choose **Generate documentation** on the project page. A background job writes the project sections (overview, architecture, directory and file guide, API and database references when the project has them, dependencies, configuration and setup, usage examples) and one document per module, from the stored analysis. Open **View documentation** to browse them. Each document can be regenerated on its own, and every regeneration keeps the previous versions. From a file's page you can also generate documentation for that single file.
 
+Documents are rendered with headings, tables, lists, links and syntax-highlighted code, with an "On this page" table of contents and previous/next navigation. Use **Download Markdown** for a single document or **Download all (ZIP)** for the whole set, organized as `README.md` (index), `sections/`, `modules/` and `files/`.
+
 ## Tests
 
 ```sh
