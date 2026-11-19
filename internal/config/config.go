@@ -39,6 +39,25 @@ type Config struct {
 	SessionIdleTimeout time.Duration
 	// Upload holds the limits applied to code uploads.
 	Upload UploadLimits
+	// AI configures the LLM used for analysis and documentation.
+	AI AIConfig
+	// JobWorkers is the number of background jobs run concurrently.
+	JobWorkers int
+}
+
+// AIConfig configures the LLM provider.
+type AIConfig struct {
+	// APIKey for the Claude API (ANTHROPIC_API_KEY). Empty disables AI features.
+	APIKey string
+	// Model is the model id, e.g. "claude-opus-5-5".
+	Model string
+	// Effort is the reasoning effort: low, medium, high, xhigh or max.
+	Effort string
+	// Timeout bounds a single AI request.
+	Timeout time.Duration
+	// BatchTokens is the approximate input-token budget for one analysis
+	// request. Files are grouped (or split) to stay within it.
+	BatchTokens int
 }
 
 // UploadLimits bounds what a single upload may contain and what a project may
@@ -146,6 +165,21 @@ func LoadFrom(getenv func(string) string) (Config, error) {
 	count("APP_UPLOAD_MAX_FILES", "5000", &up.MaxFiles)
 	count("APP_UPLOAD_MAX_COMPRESSION_RATIO", "100", &up.MaxCompressionRatio)
 	duration("APP_UPLOAD_TIMEOUT", "10m", &up.Timeout)
+	cfg.AI.APIKey = strings.TrimSpace(getenv("ANTHROPIC_API_KEY"))
+	cfg.AI.Model = get("APP_AI_MODEL", "claude-opus-5-5")
+	cfg.AI.Effort = strings.ToLower(get("APP_AI_EFFORT", "medium"))
+	switch cfg.AI.Effort {
+	case "low", "medium", "high", "xhigh", "max":
+	default:
+		errs = append(errs, fmt.Errorf("APP_AI_EFFORT must be low, medium, high, xhigh or max, got %q", cfg.AI.Effort))
+	}
+	duration("APP_AI_TIMEOUT", "5m", &cfg.AI.Timeout)
+	count("APP_AI_BATCH_TOKENS", "40000", &cfg.AI.BatchTokens)
+	if cfg.AI.BatchTokens > 0 && cfg.AI.BatchTokens < 2000 {
+		errs = append(errs, errors.New("APP_AI_BATCH_TOKENS must be at least 2000"))
+	}
+	count("APP_JOB_WORKERS", "2", &cfg.JobWorkers)
+
 	if up.MaxFileBytes > up.MaxTotalBytes && up.MaxTotalBytes > 0 {
 		errs = append(errs, errors.New("APP_UPLOAD_MAX_FILE_SIZE must not exceed APP_UPLOAD_MAX_TOTAL_SIZE"))
 	}

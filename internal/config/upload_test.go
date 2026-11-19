@@ -86,3 +86,33 @@ func TestParseSize(t *testing.T) {
 		}
 	}
 }
+
+func TestAIConfig(t *testing.T) {
+	cfg, err := LoadFrom(envMap(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AI.APIKey != "" || cfg.AI.Model != "claude-opus-5-5" || cfg.AI.Effort != "medium" ||
+		cfg.AI.Timeout != 5*time.Minute || cfg.AI.BatchTokens != 40000 || cfg.JobWorkers != 2 {
+		t.Errorf("defaults = %+v, workers %d", cfg.AI, cfg.JobWorkers)
+	}
+
+	cfg, err = LoadFrom(envMap(map[string]string{
+		"ANTHROPIC_API_KEY": " sk-test ", "APP_AI_MODEL": "claude-sonnet-5-5", "APP_AI_EFFORT": "HIGH",
+		"APP_AI_TIMEOUT": "90s", "APP_AI_BATCH_TOKENS": "8000", "APP_JOB_WORKERS": "4",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AI.APIKey != "sk-test" || cfg.AI.Model != "claude-sonnet-5-5" || cfg.AI.Effort != "high" ||
+		cfg.AI.Timeout != 90*time.Second || cfg.AI.BatchTokens != 8000 || cfg.JobWorkers != 4 {
+		t.Errorf("overrides = %+v, workers %d", cfg.AI, cfg.JobWorkers)
+	}
+
+	for env, needle := range map[string]string{"APP_AI_EFFORT": "APP_AI_EFFORT", "APP_AI_BATCH_TOKENS": "at least 2000", "APP_JOB_WORKERS": "APP_JOB_WORKERS"} {
+		value := map[string]string{"APP_AI_EFFORT": "extreme", "APP_AI_BATCH_TOKENS": "100", "APP_JOB_WORKERS": "0"}[env]
+		if _, err := LoadFrom(envMap(map[string]string{env: value})); err == nil || !strings.Contains(err.Error(), needle) {
+			t.Errorf("%s=%s: err = %v", env, value, err)
+		}
+	}
+}
