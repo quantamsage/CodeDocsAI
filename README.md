@@ -28,6 +28,12 @@ To build a binary:
 go build -o bin/codedocs ./cmd/server
 ```
 
+## AI analysis
+
+Set `ANTHROPIC_API_KEY` (from https://platform.claude.com/) before starting the server. Then open a project with uploaded files and choose **Analyze project**: the analysis runs as a background job (you can leave the page), extracts each file's structure (Go with the Go parser, other languages with language-specific patterns), analyzes the code in batches with the AI, and builds a project overview. Results appear on the project's **Analysis** page and on each file's page.
+
+Model and limits are configurable with `APP_AI_MODEL` (default `claude-opus-5-5`), `APP_AI_EFFORT`, `APP_AI_TIMEOUT`, `APP_AI_BATCH_TOKENS` and `APP_JOB_WORKERS` (see `.env.example`). Without a key, everything except AI features keeps working. Automated tests never call the AI; they use a fake provider.
+
 ## Tests
 
 ```sh

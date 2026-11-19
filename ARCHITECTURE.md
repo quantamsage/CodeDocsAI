@@ -13,6 +13,10 @@ internal/auth/         accounts, argon2id password hashing, login throttling, se
 internal/projects/     owner-scoped project store (create, get, list, delete)
 internal/files/        uploads: path cleaning, language/kind detection, safe ZIP extraction,
                        blob storage on disk, owner-scoped file store and directory tree
+internal/ai/           LLM provider interface, Claude implementation (official Go SDK), fake for tests
+internal/structure/    language-aware structure extraction (go/ast for Go, patterns for others)
+internal/jobs/         SQLite-backed background job queue (progress, retries, cancel, recovery)
+internal/analysis/     AI analysis pipeline (selection, batching, validation, synthesis, import graph)
 internal/view/         HTML template renderer (layout + partials + per-page sets)
 internal/server/       routing, middleware, centralized error handling, handlers
 web/                   embedded assets: templates/{layouts,partials,pages}, static/{css,js}
@@ -71,6 +75,24 @@ Routes: `GET/POST /projects/{id}/upload` and `GET /projects/{id}/files/{path...}
 
 **Explorer.** Every file query joins `projects` on `user_id`, so another user's files return 404. The tree is built in memory from the sorted file list and rendered with nested `<details>` (no JavaScript needed). Small projects are fully expanded; on file pages, the directories leading to the current file are open. The file viewer shows up to 512 KiB with CSS line numbers. Content is HTML-escaped by `html/template` and served as part of the page, never as a raw same-origin document.
 
+## AI analysis
+
+**Provider.** `ai.Provider.GenerateJSON` takes a system prompt, a user prompt and a JSON schema. `ai.Claude` calls the Messages API (beta endpoint, for server-side refusal fallbacks) with `output_config: {effort, format: json_schema}`; thinking is left to the model's default. Errors wrap `ErrNotConfigured`, `ErrRateLimited`, `ErrTransient`, `ErrInvalidOutput` or `ErrRequestRejected`; `ai.Retryable` and `ai.RetryAfter` drive job retries. Swapping vendors means another `Provider`.
+
+**Untrusted input.** Uploaded code is only placed in the user prompt, inside `<file>`/`<content>` delimiters with line numbers; system prompts say the files are data and that instructions inside them must be ignored. Model output is never executed and is validated before storage.
+
+**Jobs.** `jobs.Queue` stores work in `jobs`. Workers (`APP_JOB_WORKERS`) claim the oldest due job with one `UPDATE … RETURNING` statement, run the registered handler with a progress reporter, then mark it succeeded, re-queue it with backoff (`run_after`) when the error is retryable and attempts remain, or mark it failed and call the type's `OnFailed`. Cancel sets the row to `canceled` and cancels the handler's context. On startup, jobs left `running` are re-queued. Only one queued/running job per type and project is allowed.
+
+**Pipeline** (`analysis.Analyzer`, job type `analyze_project`):
+
+```
+files ─▶ select relevant ─▶ structure.Extract ─▶ plan batches (≤ budget, ≤ 8 files, split large files)
+      ─▶ AI per batch ─▶ validate (paths, names in code, caps) ─▶ store "file" results
+      ─▶ aggregate + import graph ─▶ [module summaries if large] ─▶ AI project synthesis ─▶ store "project"
+```
+
+Results live in `analysis_results` (`structure` and `file` per file, `batch` with token usage, `project`), tagged with the job id; earlier runs are deleted when a new run starts, while the current run's rows let a retry skip finished files. Reads (`analysis.Store.Project/Files/File`) join `projects.user_id`.
+
 ## Templates
 
 `view.New` parses `layouts/*` and `partials/*` once, then clones that set for every file in `pages/`. This lets each page define its own `title` and `content` blocks without clashing with other pages. `Render` executes into a buffer, so a template error never sends a half-written page. Every page receives `view.Page{Title, RequestID, User, CSRFToken, Flash, Data}`; handlers build it with `s.page(r, title, data)`. Forms use the `csrf` partial (or `$csrf` inside `with` blocks). Template helpers: `date`, `isodate` and `bytes`.
@@ -92,6 +114,8 @@ Routes: `GET/POST /projects/{id}/upload` and `GET /projects/{id}/files/{path...}
 | `jobs` | Background job queue: type, status, progress (current, total, message), attempts and max attempts, `run_after` for retry back-off, payload and error. |
 | `analysis_results` | Parser-extracted `structure`, AI per-`file` and per-`batch` analyses, and the synthesized `project` analysis, stored as JSON with token usage. |
 | `documentation` | Versioned Markdown for each (`project`, `module` or `file` scope, `scope_key`). The highest `version` is the current one. |
+
+Analysis rows (`analysis_results`) reference their job; jobs and results cascade with the project.
 
 Migration 0002 adds `sessions` (token hash, CSRF token, flash, user agent, remote address, created, last seen and expiry), `users.last_login_at`, and a unique index on `(user_id, name COLLATE NOCASE)` so each user's project names are unique.
 

@@ -6,8 +6,8 @@
 |---|---|---|
 | 1 | Project Foundation and Architecture | ✅ Complete (approved) |
 | 2 | Authentication and User Dashboard | ✅ Complete (approved) |
-| 3 | Code Upload and Project Processing | ✅ Complete (awaiting approval) |
-| 4 | AI Integration and Codebase Analysis | Not started |
+| 3 | Code Upload and Project Processing | ✅ Complete (approved) |
+| 4 | AI Integration and Codebase Analysis | ✅ Complete |
 | 5 | Documentation Generation | Not started |
 | 6 | Documentation Viewer and Export | Not started |
 | 7 | Interactive AI Code Assistant | Not started |
@@ -80,6 +80,27 @@ I ran a manual smoke test with the built binary: a fresh DB migrated `[1 2]`; re
 
 I also ran a manual smoke test with the built binary over real HTTP (curl): register → create project → upload a ZIP of this repository's `internal/` folder plus `go.mod` → 40 files stored with their structure, Go and SQL detected on the dashboard, and the file viewer returned 200, with no errors logged.
 
+## Phase 4 — completed
+
+- **AI provider interface** (`internal/ai`): `Provider.GenerateJSON(ctx, Request{System, Prompt, Schema})` is the only way the app reaches an LLM. The Claude implementation uses the official Go SDK (`anthropic-sdk-go/v2`) with schema-constrained JSON output (`output_config.format`), the configured model and effort (default `claude-opus-5-5`, `medium`), and server-side refusal fallbacks on models that support them. Errors are classified as not configured / rate limited (with `Retry-After`) / transient / unusable output / rejected request. `ai.Fake` serves tests; no test calls a real API.
+- **Configuration:** `ANTHROPIC_API_KEY`, `APP_AI_MODEL`, `APP_AI_EFFORT`, `APP_AI_TIMEOUT`, `APP_AI_BATCH_TOKENS` (per-request input budget) and `APP_JOB_WORKERS`. Without a key the app runs normally and explains that analysis is not configured.
+- **Language-aware structure extraction** (`internal/structure`): Go files are parsed with `go/parser`/`go/ast` (package, imports, functions and methods with signatures and receivers, structs with fields and tags, interfaces with methods, type aliases, constants, variables, exported flags, doc comments). Python, JavaScript/TypeScript, Java, Kotlin, C#, Rust, PHP, Ruby and C/C++ use per-language declaration patterns (marked "heuristic"). HTTP route registrations are detected for net/http, Express, Flask/FastAPI, Spring, ASP.NET, Laravel and Rails; SQL `CREATE TABLE`s become tables; dependency manifests (go.mod, package.json, requirements.txt, Cargo.toml, pyproject.toml, composer.json, Gemfile, pom.xml, Gradle, .csproj, CMake) yield declared dependencies.
+- **Background jobs** (`internal/jobs`): a queue in the `jobs` table with atomic claiming, progress (current/total/message), retries with exponential backoff (or the provider's `Retry-After`), a per-job attempt limit, cancellation of queued and running jobs, panic recovery, re-queueing of jobs interrupted by a restart, and one active job per type and project.
+- **Analysis pipeline** (`internal/analysis`, job `analyze_project`):
+  1. selects source, configuration, manifest and project documentation files (skips lock files, licences, changelogs);
+  2. extracts and stores each file's structure;
+  3. batches files by directory within the token budget (max 8 per request) and splits files larger than the budget into line ranges;
+  4. sends each batch with its structure and line-numbered content inside `<file>`/`<content>` data delimiters, with a system prompt that marks uploaded code as untrusted;
+  5. validates each response: only paths in the batch, functions/types/endpoints/models/settings that actually appear in the code (functions found by the parser are marked verified), cleaned and length-capped text; files omitted from a response are retried alone once, then marked as missing; a cut-off or rejected multi-file batch is split in half and retried;
+  6. stores results per file, so a retried job resumes where it stopped instead of re-analyzing finished files;
+  7. aggregates languages, declared and used dependencies, endpoints, data models and configuration; builds a deterministic import graph (Go module packages, JS/TS relative imports, Python modules, C includes, Ruby requires, Java imports); and asks the AI for the project-level view (purpose, functionality, technologies, architecture, components, workflows, entry points, interactions, error handling, logging, dependency purposes, assumptions). When the file summaries exceed the budget, modules are summarized first. Component paths the AI names are kept only if they exist.
+- **Project status** moves to `analyzing`, then `analyzed`; a failure sets `failed` and a cancel restores `uploaded`.
+- **Web:** "Analyze project" (and "Re-analyze") on the project page, live progress (`GET /projects/{id}/jobs/latest`, polled by JS; the page works without JS on reload), cancel, an analysis page (`/projects/{id}/analysis`) with overview, architecture, workflows, endpoints, data models, dependencies, configuration, relationships, error handling/logging, assumptions and per-file summaries, and an AI panel on each file page. Uploads are refused while a job is active, and deleting a project cancels its jobs first.
+
+### Tests
+
+New coverage, all with mocked AI: the Claude provider against a local fake API (request shape: schema format, effort, fallback beta header, no thinking parameter; parsing; refusal, cut-off, empty and malformed output; 401/429 with `Retry-After`/529/500/413/400 and network errors); structure extraction for Go (AST details, partial results on parse errors, symbol limit) and every heuristic language, routes, SQL tables and all manifest formats; the job queue (progress, one active job per type, permanent failures, backoff and attempt limits, provider retry delays, panics, canceling queued and running jobs, restart recovery, owner scoping, the worker loop, `CancelActive`); batching and splitting; validation rejecting invented functions/types/endpoints/models/settings and foreign paths; the import graph; the pipeline end to end (statuses, aggregates, verified functions, skipped files, code only in delimited user prompts, owner scoping), large-file splitting and merging, batch splitting on cut-off output, retry of omitted files, resuming without re-analysis after a rate limit, failures (no AI, no files, rejected request) and module summaries; and the HTTP flow (start, progress JSON, completion, analysis and file pages with escaped AI output, conflicts, upload blocking, cancel, failures shown, cross-user isolation, project deletion).
+
 ## Architectural decisions
 
 - **Pure-Go SQLite (`modernc.org/sqlite`)** rather than `mattn/go-sqlite3`, so builds need no cgo or C toolchain. As a result, `go test -race` (which needs cgo) is not available on machines without a C compiler.
@@ -101,11 +122,21 @@ I also ran a manual smoke test with the built binary over real HTTP (curl): regi
 - **Likely secrets are never stored** (`.env`, private keys), so they can't leak into Phase 4 prompts or exports.
 - **Any upload sets the project status to `uploaded`,** because earlier analysis no longer matches the code.
 
+- **One LLM gateway** (`ai.Provider`) with JSON-schema output, so every AI response is machine-checked before use; provider errors carry a retry classification that the job queue understands.
+- **Structure first, AI second.** Parsed facts ground the prompts and are used to reject model claims about code that does not exist. Go gets a real parser; other languages get explicit, documented heuristics instead of pretending to parse them.
+- **Results stored per file, per job.** Analysis is resumable after rate limits or restarts and never sends the whole codebase at once; the project view is built from summaries, not code.
+- **SQLite-backed job queue** instead of external infrastructure: atomic claim with `UPDATE … RETURNING`, polling workers in the same binary.
+
 ## Outstanding tasks
 
-- Phase 4: AI provider interface, structural parsing, the batched analysis pipeline and background jobs. When analysis is running, uploads should be blocked or cancel the job; Phase 3 has no jobs yet, so it always resets the status to `uploaded`.
+- Phase 5: documentation generation from the stored analysis, versions, and regeneration of the whole project or one file/module.
 
 ## Known issues / limitations
+
+- Analysis quality and cost depend on the model; a large project makes one request per batch plus synthesis. Token usage is shown on the analysis page.
+- Non-Go languages use declaration patterns, so unusual syntax (multi-line signatures, macros, decorators that wrap definitions) can be missed. Function claims from the AI are still checked against the code text.
+- Files larger than the budget are analyzed in line ranges; a function spanning a range boundary may be described from partial code.
+- Jobs run in the server process; with several server instances each would run its own workers against the same database (claiming stays atomic, but this setup is untested).
 
 - Login throttling is in memory, so it resets on restart and isn't shared between instances.
 - Registering with an email that already exists says so, which reveals that the account exists. This is a deliberate usability trade-off; login doesn't reveal it.
